@@ -7,23 +7,29 @@
  * carte: le immagini entrano così nell'artefatto della build e all'avvio ci sono
  * già, senza consumare RAM né tempo del bot.
  *
- * Gira solo su un host di build: in locale esce subito, così `npm install` resta
- * veloce. Si può forzare con `YOMI_BUILD_IMAGES=1`, limitare con
- * `YOMI_IMAGES_LIMIT=20`.
+ * Si attiva solo quando `assets/cards/` è vuota, che è il caso di ogni build su
+ * un host pulito; in locale, dopo la prima volta, esce subito. Si disattiva con
+ * `YOMI_SKIP_IMAGES=1`, si può limitare con `YOMI_IMAGES_LIMIT=20`.
  */
 import { spawnSync } from 'node:child_process';
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
-const onHost =
-  process.env.YOMI_BUILD_IMAGES === '1' ||
-  process.env.RENDER === 'true' ||
-  Boolean(process.env.RENDER_SERVICE_ID);
-
-if (!onHost) {
+if (process.env.YOMI_SKIP_IMAGES === '1') {
   process.exit(0);
+}
+
+// Se le carte ci sono già (installazione locale dopo la prima volta) non c'è
+// niente da fare: su un host di build la cartella è vuota e si genera tutto.
+try {
+  if (readdirSync(join(root, 'assets', 'cards')).some((name) => name.endsWith('.png'))) {
+    process.exit(0);
+  }
+} catch {
+  // cartella assente: è il caso della build, si prosegue
 }
 
 function run(script, args = []) {
