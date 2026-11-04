@@ -5,7 +5,29 @@
  * rispondere e un endpoint da pingare, così il servizio gratuito non va in
  * spin-down. Non espone dati utente e non accetta comandi.
  */
+import { readdirSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
+
+const cardsDir = fileURLToPath(new URL('../assets/cards/', import.meta.url));
+
+/**
+ * Cosa sta girando davvero: Render mette il commit e il branch nell'ambiente,
+ * quindi /health dice subito se il deploy è quello giusto e se durante la build
+ * le immagini delle carte sono state generate.
+ */
+const runtime = {
+  commit: (process.env.RENDER_GIT_COMMIT ?? 'locale').slice(0, 7),
+  branch: process.env.RENDER_GIT_BRANCH ?? '',
+  node: process.version,
+  get images() {
+    try {
+      return readdirSync(cardsDir).filter((name) => name.endsWith('.png')).length;
+    } catch {
+      return 0;
+    }
+  },
+};
 
 function esc(value) {
   return String(value).replace(/[&<>"']/g, (char) => {
@@ -20,6 +42,9 @@ function page(status, uptimeSeconds) {
     ['Stato', status.ready ? 'online' : 'avvio'],
     ['Server', String(status.servers)],
     ['Carte nel catalogo', String(status.cards)],
+    ['Immagini generate', `${runtime.images} / ${status.cards}`],
+    ['Versione', runtime.commit],
+    ['Node', runtime.node],
     ['Uptime', `${Math.floor(uptimeSeconds / 60)}m ${uptimeSeconds % 60}s`],
   ];
   const cells = rows.map(([key, value]) => `<tr><th>${esc(key)}</th><td>${esc(value)}</td></tr>`).join('');
@@ -63,7 +88,15 @@ export function startStatusServer({ port, getStatus }) {
     const path = (request.url ?? '/').split('?')[0];
 
     if (path === '/health' || path === '/healthz') {
-      const body = JSON.stringify({ ok: true, uptimeSeconds: uptime(), ...getStatus() });
+      const body = JSON.stringify({
+        ok: true,
+        uptimeSeconds: uptime(),
+        commit: runtime.commit,
+        branch: runtime.branch,
+        node: runtime.node,
+        images: runtime.images,
+        ...getStatus(),
+      });
       response.writeHead(200, {
         'content-type': 'application/json; charset=utf-8',
         'cache-control': 'no-store',
