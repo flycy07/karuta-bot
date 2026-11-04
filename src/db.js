@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS trades (
 CREATE INDEX IF NOT EXISTS idx_inventory_card ON inventory (card_id);
 `;
 
-export function openDatabase(file = 'data/karuta.db') {
+export function openDatabase(file = 'data/yomi.db') {
   if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');

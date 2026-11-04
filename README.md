@@ -1,9 +1,9 @@
-# Karuta-style bot
+# Yomi
 
-Bot Discord in stile **Karuta**: le carte cadono in chat e si prendono cliccando il
-pulsante numerato della carta (chi arriva primo, vince). Il drop a caso è aperto a tutti
-i membri, mentre scegliere **quali** carte far cadere è riservato agli admin. Collezione,
-wishlist, serie, scambi e classifica inclusi.
+**Yomi** è un bot Discord per collezionare carte in stile **Karuta**: le carte cadono in
+chat e si prendono cliccando il pulsante numerato della carta (chi arriva primo, vince).
+Il drop a caso è aperto a tutti i membri, mentre scegliere **quali** carte far cadere è
+riservato agli admin. Collezione, wishlist, serie, scambi e classifica inclusi.
 
 - Node 22.5+ (usa `node:sqlite`, quindi **nessuna dipendenza nativa da compilare**)
 - discord.js v14, **nessun intent privilegiato** (niente Message Content)
@@ -25,7 +25,7 @@ wishlist, serie, scambi e classifica inclusi.
    npm start
    ```
 
-Al primo avvio crea `data/karuta.db` e registra i comandi slash. Senza `GUILD_ID` la
+Al primo avvio crea `data/yomi.db` e registra i comandi slash. Senza `GUILD_ID` la
 registrazione è globale e può richiedere fino a un'ora per comparire; con `GUILD_ID`
 è immediata.
 

@@ -1,9 +1,9 @@
 {
-  "name": "karuta-style-bot",
+  "name": "yomi",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Bot Discord in stile Karuta: drop di carte, claim scrivendo il nome, collezione, wishlist e trade.",
+  "description": "Yomi: bot Discord per collezionare carte con drop a pulsanti numerati, collezione, wishlist e scambi.",
   "engines": {
     "node": ">=22.5.0"
   },
