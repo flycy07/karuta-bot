@@ -1,8 +1,9 @@
 # Karuta-style bot
 
-Bot Discord in stile **Karuta**: un admin fa cadere delle carte, gli utenti le prendono
-cliccando il pulsante numerato della carta che vogliono (chi arriva primo, vince).
-Collezione, wishlist, serie, scambi e classifica inclusi.
+Bot Discord in stile **Karuta**: le carte cadono in chat e si prendono cliccando il
+pulsante numerato della carta (chi arriva primo, vince). Il drop a caso è aperto a tutti
+i membri, mentre scegliere **quali** carte far cadere è riservato agli admin. Collezione,
+wishlist, serie, scambi e classifica inclusi.
 
 - Node 22.5+ (usa `node:sqlite`, quindi **nessuna dipendenza nativa da compilare**)
 - discord.js v14, **nessun intent privilegiato** (niente Message Content)
@@ -30,9 +31,9 @@ registrazione è globale e può richiedere fino a un'ora per comparire; con `GUI
 
 ## Come si gioca
 
-1. Un **admin** usa `/drop`: può far cadere N carte a caso, oppure una carta specifica
-   (`carta:`), oppure N carte di una sola serie (`serie:`). Entrambe le opzioni hanno
-   l'autocomplete: scrivi due lettere e scegli dalla lista.
+1. Chiunque può usare `/drop`: cadono da 1 a 5 carte a caso. Gli **admin** possono anche
+   scegliere cosa far cadere, con una carta specifica (`carta:`) o con una serie
+   (`serie:`); entrambe le opzioni hanno l'autocomplete.
 2. Compaiono le carte **coperte** (solo serie e rarità) con i pulsanti **1**, **2**, **3**…
 3. Chi clicca per primo il pulsante di una carta la prende: la carta si rivela nel
    messaggio del drop e il pulsante si disabilita.
@@ -42,15 +43,16 @@ Non serve scrivere niente in chat, quindi il bot non richiede **Message Content 
 
 ## Chi può droppare
 
-`/drop` è riservato a chi ha il permesso **Gestire il server** oppure ha il ruolo
-indicato in `ADMIN_ROLE_ID` nel `.env`. Tutti gli altri ricevono un messaggio privato
-di errore e non possono far cadere carte.
+Il drop a caso è aperto a tutti i membri del server. Scegliere **quali** carte far cadere
+(`carta:`, `serie:`) è riservato a chi ha il permesso **Gestire il server** oppure ha il
+ruolo indicato in `ADMIN_ROLE_ID` nel `.env`: un membro normale che prova a specificarle
+riceve un messaggio privato di errore.
 
 ## Comandi
 
 | Comando | Chi | Cosa fa |
 | --- | --- | --- |
-| `/drop [quantita] [carta] [serie]` | admin | Fa cadere le carte scelte (o pescate a caso) |
+| `/drop [quantita] [carta] [serie]` | tutti (carta/serie: admin) | Fa cadere carte a caso o scelte |
 | `/collection [utente]` | tutti | Collezione con copie e carte uniche |
 | `/card <nome>` | tutti | Scheda carta, copie possedute, collezionisti |
 | `/series <nome>` | tutti | Tutte le carte della serie con ✅/⬜ |

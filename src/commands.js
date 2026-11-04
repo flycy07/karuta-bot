@@ -10,7 +10,7 @@ import {
 import { catalog, cardsBySeries, getCard, rarityRank, seriesList } from './cards.js';
 import * as db from './db.js';
 import { cardInfoEmbed, colorOf, labelOf, stars } from './embeds.js';
-import { findCardsByName, matchesCard, normalizeName } from './game.js';
+import { findCardsByName, matchesCard, normalizeName, rollDrop } from './game.js';
 
 const MAX_LIST = 20;
 
@@ -18,7 +18,7 @@ function ephemeral(interaction, content) {
   return interaction.reply({ content, flags: MessageFlags.Ephemeral });
 }
 
-/** Solo chi ha "Gestire il server" (o il ruolo configurato) può droppare carte. */
+/** Solo chi ha "Gestire il server" (o il ruolo configurato) può scegliere le carte da droppare. */
 function isAdmin(interaction, ctx) {
   if (interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return true;
   const roleId = ctx.config.adminRoleId;
@@ -66,27 +66,28 @@ export const commands = [
   {
     builder: new SlashCommandBuilder()
       .setName('drop')
-      .setDescription('(Admin) Fa cadere le carte che scegli tu.')
+      .setDescription('Fa cadere delle carte a caso nel canale.')
       .addIntegerOption((option) =>
-        option.setName('quantita').setDescription('Quante carte a caso (1-5)').setMinValue(1).setMaxValue(5),
+        option.setName('quantita').setDescription('Quante carte (1-5)').setMinValue(1).setMaxValue(5),
       )
       .addStringOption((option) =>
-        option.setName('carta').setDescription('Una carta specifica (scrivi il nome)').setAutocomplete(true),
+        option.setName('carta').setDescription('Solo admin: una carta specifica').setAutocomplete(true),
       )
       .addStringOption((option) =>
-        option.setName('serie').setDescription('Pesca a caso solo da questa serie').setAutocomplete(true),
+        option.setName('serie').setDescription('Solo admin: pesca a caso solo da questa serie').setAutocomplete(true),
       ),
     async run(interaction, ctx) {
-      if (!isAdmin(interaction, ctx)) {
-        return ephemeral(
-          interaction,
-          'Solo chi ha il permesso **Gestire il server** (o il ruolo configurato in `ADMIN_ROLE_ID`) può droppare carte.',
-        );
-      }
-
       const amount = interaction.options.getInteger('quantita') ?? 3;
       const cardQuery = interaction.options.getString('carta');
       const seriesQuery = interaction.options.getString('serie');
+
+      if ((cardQuery || seriesQuery) && !isAdmin(interaction, ctx)) {
+        return ephemeral(
+          interaction,
+          'Scegliere una carta o una serie è riservato agli admin (**Gestire il server** o ruolo in `ADMIN_ROLE_ID`). ' +
+            'Senza opzioni il drop è a caso e lo può fare chiunque.',
+        );
+      }
 
       let pool = catalog;
       if (seriesQuery) {
@@ -327,12 +328,12 @@ export const commands = [
         .setTitle('Come si gioca')
         .setDescription(
           [
-            '**1.** Un admin usa `/drop` e sceglie le carte oppure una serie.',
+            '**1.** Chiunque può usare `/drop`: cadono carte a caso. Gli admin possono scegliere carta o serie.',
             '**2.** Compaiono le carte coperte con i pulsanti **1**, **2**, **3**…: chi clicca per primo prende quella carta.',
             '**3.** Una carta a testa per drop, e un cooldown dopo ogni claim.',
             '',
             '**Comandi**',
-            '`/drop [quantita] [carta] [serie]` · solo admin',
+            '`/drop [quantita] [carta] [serie]` · tutti; carta/serie solo admin',
             '`/collection [utente]` · la tua collezione',
             '`/card <nome>` · scheda carta',
             '`/series <nome>` · carte di una serie',
