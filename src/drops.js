@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { cardImageSource } from './cards.js';
 import { getLastClaimAt, recordClaim, touchUser } from './db.js';
-import { hiddenCardEmbed, revealedCardEmbed } from './embeds.js';
+import { cardImageEmbed, hiddenCardEmbed, revealedCardEmbed } from './embeds.js';
 import { claimCard, createDropSession, remainingCards } from './game.js';
 
 /**
@@ -24,10 +25,31 @@ export class DropManager {
     return Math.max(0, this.config.dropCooldownMs - (now - last));
   }
 
+  /** Sorgenti immagine delle carte di un drop (file locale oppure URL). */
+  images(session) {
+    const sources = new Map();
+    for (const card of session.cards) {
+      const source = cardImageSource(card);
+      if (source) sources.set(card.id, source);
+    }
+    return sources;
+  }
+
+  /** Allegati da caricare: solo le carte con un file locale, non quelle con URL. */
+  attachmentFiles(session) {
+    return [...this.images(session).values()]
+      .filter((source) => source.file)
+      .map((source) => new AttachmentBuilder(source.file, { name: source.name }));
+  }
+
   renderEmbeds(session) {
     const total = session.cards.length;
+    const sources = this.images(session);
     return session.cards.map((card, index) => {
       const claim = session.claimed.find((entry) => entry.index === index);
+      const source = sources.get(card.id);
+      // Con un'immagine la carta si mostra e basta: niente testo sopra.
+      if (source) return cardImageEmbed(card, { attachment: source.name, url: source.url });
       return claim
         ? revealedCardEmbed(card, { claimedBy: claim.userId })
         : hiddenCardEmbed(card, { index: index + 1, total, expiresAt: session.expiresAt });
@@ -65,6 +87,7 @@ export class DropManager {
     const message = await channel.send({
       embeds: this.renderEmbeds(session),
       components: this.renderComponents(session),
+      files: this.attachmentFiles(session),
     });
     session.message = message;
     session.messageId = message.id;
@@ -87,7 +110,11 @@ export class DropManager {
   async refresh(session) {
     if (!session.message) return;
     await session.message
-      .edit({ embeds: this.renderEmbeds(session), components: this.renderComponents(session) })
+      .edit({
+        embeds: this.renderEmbeds(session),
+        components: this.renderComponents(session),
+        files: this.attachmentFiles(session),
+      })
       .catch(() => {});
   }
 

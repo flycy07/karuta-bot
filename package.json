@@ -10,10 +10,15 @@
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test test/",
-    "demo": "node scripts/demo.js"
+    "demo": "node scripts/demo.js",
+    "cards": "node scripts/build-cards.js"
   },
   "dependencies": {
     "discord.js": "^14.16.0",
     "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@expo-google-fonts/roboto": "^0.4.3",
+    "sharp": "^0.35.5"
   }
 }

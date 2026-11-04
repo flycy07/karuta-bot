@@ -109,11 +109,28 @@ Frieren, Oshi no Ko e altri).
   (common 60%, uncommon 25%, rare 10%, epic 4%, legendary 1%).
 - Il catalogo è solo un elenco di nomi: nessuna immagine o asset protetto è incluso.
 
+## Immagini delle carte
+
+Nel drop ogni carta è **solo la sua immagine**, senza testo sopra, con i pulsanti numerati
+sotto: è il formato "cartolina" dei bot tipo Karuta.
+
+Tre modi per dare un'immagine a una carta, in ordine di preferenza:
+
+1. **PNG già pronto** in `assets/cards/<id>.png` (es. `assets/cards/satoru-gojo.png`):
+   il bot lo invia come allegato, nessun hosting esterno da configurare.
+2. **Artwork grezzo** in `assets/art/<id>.png` + `npm run cards`: lo script disegna
+   cornice, targhetta col nome, serie, stelle di rarità e numero di serie.
+3. **URL nel catalogo**: campo `image` di `cards.json`, se le immagini sono già online.
+
+Le carte senza immagine usano l'embed testuale di prima (serie e rarità coperte), quindi
+il bot funziona anche a catalogo vuoto. `assets/cards/` è generata e sta nel `.gitignore`.
+
 ## Sviluppo
 
 ```bash
 npm test     # test del motore di gioco (node:test, nessuna dipendenza)
 npm run demo # simula un drop con i pulsanti nel terminale, senza token
+npm run cards # genera le immagini delle carte in assets/cards/
 ```
 
 ## Struttura

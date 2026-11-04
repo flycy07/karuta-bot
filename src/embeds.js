@@ -41,6 +41,14 @@ export function revealedCardEmbed(card, { claimedBy } = {}) {
   return embed;
 }
 
+/** Carta mostrata come immagine pura: solo l'artwork, senza testo sopra. */
+export function cardImageEmbed(card, { attachment, url } = {}) {
+  const embed = new EmbedBuilder().setColor(colorOf(card.rarity));
+  const source = attachment ? `attachment://${attachment}` : url;
+  if (source) embed.setImage(source);
+  return embed;
+}
+
 /** Scheda carta per /card. */
 export function cardInfoEmbed(card, { qty = 0, owners = 0, wanted = false } = {}) {
   const embed = baseEmbed(card)
