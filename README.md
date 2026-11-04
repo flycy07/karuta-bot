@@ -51,6 +51,9 @@ server e `npm start` si comporta come prima.
    La build scarica gli artwork e genera le 160 carte: non serve lanciare niente a
    mano nella console e ogni deploy riparte con le immagini già pronte (la build
    richiede un paio di minuti in più, le devDependencies servono proprio a questo).
+   Se hai lasciato il comando di build a `npm install`, non serve cambiarlo: c'è un
+   `postinstall` (`scripts/install-images.js`) che su Render genera le immagini
+   durante la build e in locale non fa niente.
 2. Variabili: `DISCORD_TOKEN`, e se vuoi `GUILD_ID`, `ADMIN_ROLE_ID`, `NODE_VERSION=22.22.0`.
 3. Fai pingare `https://<servizio>.onrender.com/health` ogni 10 minuti da un cron esterno
    (cron-job.org, UptimeRobot): senza traffico l'istanza si addormenta e il bot va offline.
