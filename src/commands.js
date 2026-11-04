@@ -4,17 +4,25 @@ import {
   ButtonStyle,
   EmbedBuilder,
   MessageFlags,
+  PermissionFlagsBits,
   SlashCommandBuilder,
 } from 'discord.js';
 import { catalog, cardsBySeries, getCard, rarityRank, seriesList } from './cards.js';
 import * as db from './db.js';
 import { cardInfoEmbed, colorOf, labelOf, stars } from './embeds.js';
-import { MAX_STRIKES, matchesCard, normalizeName } from './game.js';
+import { findCardsByName, matchesCard, normalizeName } from './game.js';
 
 const MAX_LIST = 20;
 
 function ephemeral(interaction, content) {
   return interaction.reply({ content, flags: MessageFlags.Ephemeral });
+}
+
+/** Solo chi ha "Gestire il server" (o il ruolo configurato) può droppare carte. */
+function isAdmin(interaction, ctx) {
+  if (interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return true;
+  const roleId = ctx.config.adminRoleId;
+  return Boolean(roleId && interaction.member?.roles?.cache?.has(roleId));
 }
 
 function resolveCard(query) {
@@ -58,20 +66,59 @@ export const commands = [
   {
     builder: new SlashCommandBuilder()
       .setName('drop')
-      .setDescription('Fa cadere delle carte nel canale: il primo che scrive il nome giusto la prende.')
+      .setDescription('(Admin) Fa cadere le carte che scegli tu.')
       .addIntegerOption((option) =>
-        option.setName('quantita').setDescription('Quante carte (1-5)').setMinValue(1).setMaxValue(5),
+        option.setName('quantita').setDescription('Quante carte a caso (1-5)').setMinValue(1).setMaxValue(5),
+      )
+      .addStringOption((option) =>
+        option.setName('carta').setDescription('Una carta specifica (scrivi il nome)').setAutocomplete(true),
+      )
+      .addStringOption((option) =>
+        option.setName('serie').setDescription('Pesca a caso solo da questa serie').setAutocomplete(true),
       ),
     async run(interaction, ctx) {
-      const amount = interaction.options.getInteger('quantita') ?? 1;
+      if (!isAdmin(interaction, ctx)) {
+        return ephemeral(
+          interaction,
+          'Solo chi ha il permesso **Gestire il server** (o il ruolo configurato in `ADMIN_ROLE_ID`) può droppare carte.',
+        );
+      }
+
+      const amount = interaction.options.getInteger('quantita') ?? 3;
+      const cardQuery = interaction.options.getString('carta');
+      const seriesQuery = interaction.options.getString('serie');
+
+      let pool = catalog;
+      if (seriesQuery) {
+        const wanted = normalizeName(seriesQuery);
+        const series = seriesList().find((name) => normalizeName(name).includes(wanted));
+        if (!series) return ephemeral(interaction, `Serie sconosciuta: **${seriesQuery}**.`);
+        pool = cardsBySeries(series);
+      }
+
+      let cards;
+      if (cardQuery) {
+        const matches = findCardsByName(pool, cardQuery);
+        if (!matches.length) return ephemeral(interaction, `Nessuna carta trovata per **${cardQuery}**.`);
+        if (matches.length > 1) {
+          return ephemeral(
+            interaction,
+            `Più carte corrispondono: ${matches.slice(0, 8).map((card) => card.name).join(', ')}`,
+          );
+        }
+        cards = matches;
+      } else {
+        cards = rollDrop(pool, amount);
+      }
+
       const wait = ctx.drops.cooldownRemaining(interaction.guildId);
       if (wait > 0) return ephemeral(interaction, `⏳ Aspetta ${Math.ceil(wait / 1000)}s prima di un altro drop.`);
       if (!interaction.channel?.isSendable?.()) return ephemeral(interaction, 'Non posso scrivere in questo canale.');
 
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
-        await ctx.drops.start({ channel: interaction.channel, guildId: interaction.guildId, amount });
-        await interaction.editReply({ content: `🎴 Droppate **${amount}** cart${amount === 1 ? 'a' : 'e'}!` });
+        await ctx.drops.start({ channel: interaction.channel, guildId: interaction.guildId, cards });
+        await interaction.editReply({ content: `🎴 Droppate **${cards.length}** cart${cards.length === 1 ? 'a' : 'e'}!` });
       } catch (error) {
         await interaction.editReply({ content: `Errore nel drop: ${error.message}` });
       }
@@ -280,12 +327,12 @@ export const commands = [
         .setTitle('Come si gioca')
         .setDescription(
           [
-            '**1.** Qualcuno usa `/drop`: appare una carta coperta con la serie e la rarità.',
-            '**2.** Il primo che scrive il nome del personaggio in chat la prende.',
-            `**3.** Dopo ${MAX_STRIKES} tentativi sbagliati perdi il drop; dopo un claim hai un cooldown.`,
+            '**1.** Un admin usa `/drop` e sceglie le carte oppure una serie.',
+            '**2.** Compaiono le carte coperte con i pulsanti **1**, **2**, **3**…: chi clicca per primo prende quella carta.',
+            '**3.** Una carta a testa per drop, e un cooldown dopo ogni claim.',
             '',
             '**Comandi**',
-            '`/drop [quantita]` · fa cadere carte',
+            '`/drop [quantita] [carta] [serie]` · solo admin',
             '`/collection [utente]` · la tua collezione',
             '`/card <nome>` · scheda carta',
             '`/series <nome>` · carte di una serie',
@@ -313,8 +360,11 @@ export async function handleCommand(interaction, ctx) {
 }
 
 export async function handleButton(interaction, ctx) {
-  const [scope, action, rawId] = interaction.customId.split(':');
+  const [scope, ...rest] = interaction.customId.split(':');
+  if (scope === 'claim') return handleClaimButton(interaction, ctx, rest[0], Number(rest[1]));
   if (scope !== 'trade') return;
+
+  const [action, rawId] = rest;
 
   const trade = db.getTrade(ctx.db, Number(rawId));
   if (!trade) {
@@ -362,4 +412,58 @@ export async function handleButton(interaction, ctx) {
     components: [],
     allowedMentions: { parse: [] },
   });
+}
+
+/** Pulsante numerato di un drop: prenota la carta se è ancora libera. */
+async function handleClaimButton(interaction, ctx, sessionId, index) {
+  const outcome = await ctx.drops.claim({
+    sessionId,
+    userId: interaction.user.id,
+    username: interaction.user.username,
+    index,
+  });
+
+  if (outcome.result === 'closed') {
+    return interaction.reply({ content: 'Questo drop non è più attivo.', flags: MessageFlags.Ephemeral });
+  }
+  if (outcome.result === 'invalid') {
+    return interaction.reply({ content: 'Carta inesistente in questo drop.', flags: MessageFlags.Ephemeral });
+  }
+  if (outcome.result === 'taken') {
+    return interaction.reply({
+      content: `Quella carta l'ha già presa <@${outcome.owner}>.`,
+      flags: MessageFlags.Ephemeral,
+      allowedMentions: { parse: [] },
+    });
+  }
+  if (outcome.result === 'already') {
+    return interaction.reply({
+      content: 'In questo drop hai già preso una carta: una a testa.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+  if (outcome.result === 'cooldown') {
+    return interaction.reply({
+      content: `⏳ Ancora ${Math.ceil(outcome.retryInMs / 1000)}s di cooldown.`,
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+
+  await interaction.update({
+    embeds: ctx.drops.renderEmbeds(outcome.session),
+    components: ctx.drops.renderComponents(outcome.session),
+  });
+  return interaction.followUp({
+    content: `🎴 Hai preso ${outcome.card.emoji} **${outcome.card.name}** · ${outcome.card.series}!`,
+    flags: MessageFlags.Ephemeral,
+  });
+}
+
+/** Autocomplete per le opzioni `carta` e `serie` di /drop. */
+export async function handleAutocomplete(interaction) {
+  const focused = interaction.options.getFocused(true);
+  const query = normalizeName(focused.value ?? '');
+  const source = focused.name === 'serie' ? seriesList() : catalog.map((card) => card.name);
+  const matches = source.filter((value) => normalizeName(value).includes(query)).slice(0, 25);
+  await interaction.respond(matches.map((value) => ({ name: value.slice(0, 100), value: value.slice(0, 100) })));
 }
