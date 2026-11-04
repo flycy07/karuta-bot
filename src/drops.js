@@ -4,6 +4,7 @@ import { cardImageSource } from './cards.js';
 import { getLastClaimAt, recordClaim, touchUser } from './db.js';
 import { cardImageEmbed, hiddenCardEmbed, revealedCardEmbed } from './embeds.js';
 import { claimCard, createDropSession, remainingCards } from './game.js';
+import { cardStrip, STRIP_NAME } from './strip.js';
 
 /**
  * Gestisce i drop attivi e i claim tramite pulsanti numerati (1, 2, 3, ...).
@@ -56,6 +57,35 @@ export class DropManager {
     });
   }
 
+  /**
+   * Corpo del messaggio del drop.
+   *
+   * Con più carte che hanno un PNG locale le unisce in una sola immagine, così
+   * Discord le mostra affiancate invece che una sotto l'altra; i pulsanti restano
+   * uno per carta, nell'ordine da sinistra a destra. Negli altri casi manda un
+   * embed per carta come prima (segnaposto testuale o URL dal catalogo).
+   */
+  async payload(session) {
+    const components = this.renderComponents(session);
+    const sources = this.images(session);
+    const local = session.cards.map((card) => sources.get(card.id));
+
+    if (local.length > 1 && local.every((source) => source?.file)) {
+      const strip = await cardStrip(local.map((source) => source.file));
+      return {
+        embeds: [cardImageEmbed(session.cards[0], { attachment: STRIP_NAME })],
+        components,
+        files: [new AttachmentBuilder(strip, { name: STRIP_NAME })],
+      };
+    }
+
+    return {
+      embeds: this.renderEmbeds(session),
+      components,
+      files: this.attachmentFiles(session),
+    };
+  }
+
   renderComponents(session) {
     const buttons = session.cards.map((card, index) => {
       const claim = session.claimed.find((entry) => entry.index === index);
@@ -84,11 +114,7 @@ export class DropManager {
       guildId,
     });
 
-    const message = await channel.send({
-      embeds: this.renderEmbeds(session),
-      components: this.renderComponents(session),
-      files: this.attachmentFiles(session),
-    });
+    const message = await channel.send(await this.payload(session));
     session.message = message;
     session.messageId = message.id;
     this.byId.set(session.id, session);
@@ -109,13 +135,7 @@ export class DropManager {
 
   async refresh(session) {
     if (!session.message) return;
-    await session.message
-      .edit({
-        embeds: this.renderEmbeds(session),
-        components: this.renderComponents(session),
-        files: this.attachmentFiles(session),
-      })
-      .catch(() => {});
+    await session.message.edit(await this.payload(session)).catch(() => {});
   }
 
   async finish(sessionId) {
@@ -131,7 +151,7 @@ export class DropManager {
   /** Claim via pulsante: valida, aggiorna il database e ridisegna il messaggio del drop. */
   async claim({ sessionId, userId, username, index, now = Date.now() }) {
     const session = this.byId.get(sessionId);
-    if (!session) return { result: 'closed' };
+    if (!session) return { closed: true } && { result: 'closed' };
 
     const outcome = claimCard(session, {
       userId,
