@@ -1,0 +1,19 @@
+{
+  "name": "karuta-style-bot",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Bot Discord in stile Karuta: drop di carte, claim scrivendo il nome, collezione, wishlist e trade.",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test test/",
+    "demo": "node scripts/demo.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.0",
+    "dotenv": "^16.4.5"
+  }
+}
