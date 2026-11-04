@@ -5,7 +5,7 @@ chat e si prendono cliccando il pulsante numerato della carta (chi arriva primo,
 Il drop a caso è aperto a tutti i membri, mentre scegliere **quali** carte far cadere è
 riservato agli admin. Collezione, wishlist, serie, scambi e classifica inclusi.
 
-- Node 22.5+ (usa `node:sqlite`, quindi **nessuna dipendenza nativa da compilare**)
+- Node 22.13+ (usa `node:sqlite`, quindi **nessuna dipendenza nativa da compilare**)
 - discord.js v14, **nessun intent privilegiato** (niente Message Content)
 - Catalogo con personaggi di anime esistenti, modificabile da JSON
 - Motore di gioco puro e testabile (`src/game.js`), senza Discord né database
@@ -28,6 +28,30 @@ riservato agli admin. Collezione, wishlist, serie, scambi e classifica inclusi.
 Al primo avvio crea `data/yomi.db` e registra i comandi slash. Senza `GUILD_ID` la
 registrazione è globale e può richiedere fino a un'ora per comparire; con `GUILD_ID`
 è immediata.
+
+## Dove tenerlo online
+
+Il bot deve restare acceso: se il processo muore, i drop smettono di funzionare.
+
+**Wispbyte** (free, filesystem persistente): immagine Docker **Node.js 22.13+ o 24**
+(`node:sqlite` esiste da 22.5 ma funziona senza flag solo da 22.13), codice via *GitHub
+Integration* o upload della zip, variabili `DISCORD_TOKEN`, `GUILD_ID` e `ADMIN_ROLE_ID`
+nel tab *Startup*, comando di avvio `node src/index.js`.
+
+**Render** (free): il servizio è un *web service*, quindi Render pretende una porta HTTP e
+spegne l'istanza dopo 15 minuti senza traffico in ingresso. Per questo il bot avvia una
+piccola dashboard di stato quando esiste la variabile `PORT` (Render la imposta da sola):
+`/` mostra una pagina, `/health` risponde JSON. In locale, senza `PORT`, non parte nessun
+server e `npm start` si comporta come prima.
+
+1. Render → *New* → *Web Service* (o il `render.yaml` del repo) → piano Free, build
+   `npm install`, start `npm start`.
+2. Variabili: `DISCORD_TOKEN`, e se vuoi `GUILD_ID`, `ADMIN_ROLE_ID`, `NODE_VERSION=22.22.0`.
+3. Fai pingare `https://<servizio>.onrender.com/health` ogni 10 minuti da un cron esterno
+   (cron-job.org, UptimeRobot): senza traffico l'istanza si addormenta e il bot va offline.
+4. **Attenzione**: sui piani free il disco è effimero, quindi `data/yomi.db` si azzera a
+   ogni riavvio o deploy e le collezioni si perdono. Per conservarle serve un disco
+   persistente (a pagamento) o un database esterno.
 
 ## Come si gioca
 

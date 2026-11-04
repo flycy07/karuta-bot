@@ -1,0 +1,24 @@
+# Blueprint Render (https://render.com/docs/blueprint-spec).
+#
+# Da sapere prima di usarlo:
+# - il piano free spegne il servizio dopo 15 minuti senza traffico in ingresso,
+#   quindi /health va pingato da un cron esterno per non andare offline;
+# - il disco dei servizi free è effimero: data/yomi.db si azzera a ogni
+#   riavvio o deploy (vedi README).
+services:
+  - type: web
+    name: yomi
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.0
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: GUILD_ID
+        sync: false
+      - key: ADMIN_ROLE_ID
+        sync: false

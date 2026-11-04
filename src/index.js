@@ -1,5 +1,7 @@
+import { catalog } from './cards.js';
 import { config } from './config.js';
 import { startBot } from './bot.js';
+import { startStatusServer } from './server.js';
 
 if (!config.token) {
   console.error(
@@ -18,7 +20,28 @@ if (!config.token) {
   process.exit(1);
 }
 
-startBot(config).catch((error) => {
+// Su Render (e host simili) la piattaforma assegna una porta e spegne i servizi
+// gratuiti che non ricevono traffico: apriamo una piccola dashboard di stato così
+// c'è qualcosa da pingare. In locale, senza PORT, non parte nessun server HTTP.
+let client = null;
+
+if (process.env.PORT) {
+  const port = Number.parseInt(process.env.PORT, 10) || 3000;
+  await startStatusServer({
+    port,
+    getStatus: () => ({
+      bot: client?.user?.tag ?? null,
+      ready: Boolean(client?.isReady?.()),
+      servers: client?.guilds?.cache?.size ?? 0,
+      cards: catalog.length,
+    }),
+  });
+  console.log(`🌐 Dashboard di stato sulla porta ${port} (/health per i ping).`);
+}
+
+try {
+  client = await startBot(config);
+} catch (error) {
   console.error('Avvio fallito:', error.message);
   process.exit(1);
-});
+}
