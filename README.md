@@ -47,7 +47,10 @@ piccola dashboard di stato quando esiste la variabile `PORT` (Render la imposta 
 server e `npm start` si comporta come prima.
 
 1. Render → *New* → *Web Service* (o il `render.yaml` del repo) → piano Free, build
-   `npm install`, start `npm start`.
+   `npm install --include=dev && npm run art && npm run cards`, start `npm start`.
+   La build scarica gli artwork e genera le 160 carte: non serve lanciare niente a
+   mano nella console e ogni deploy riparte con le immagini già pronte (la build
+   richiede un paio di minuti in più, le devDependencies servono proprio a questo).
 2. Variabili: `DISCORD_TOKEN`, e se vuoi `GUILD_ID`, `ADMIN_ROLE_ID`, `NODE_VERSION=22.22.0`.
 3. Fai pingare `https://<servizio>.onrender.com/health` ogni 10 minuti da un cron esterno
    (cron-job.org, UptimeRobot): senza traffico l'istanza si addormenta e il bot va offline.

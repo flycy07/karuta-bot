@@ -4,16 +4,21 @@
 # - il piano free spegne il servizio dopo 15 minuti senza traffico in ingresso,
 #   quindi /health va pingato da un cron esterno per non andare offline;
 # - il disco dei servizi free è effimero: data/yomi.db si azzera a ogni
-#   riavvio o deploy (vedi README).
+#   riavvio o deploy (vedi README);
+# - le immagini delle carte non stanno nel repository (artwork protetti e PNG
+#   generati sono nel .gitignore): la build le scarica da AniList e le compone
+#   con la cornice, così a ogni deploy arrivano già pronte.
 services:
   - type: web
     name: yomi
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install --include=dev && npm run art && npm run cards
     startCommand: npm start
     healthCheckPath: /health
     envVars:
+      # sharp e il font di disegno servono a generare le carte: sono
+      # devDependencies, per questo la build installa anche quelle.
       - key: NODE_VERSION
         value: 22.22.0
       - key: DISCORD_TOKEN
