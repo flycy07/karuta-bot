@@ -117,32 +117,36 @@ async function loadFrames() {
   const sheet = FRAME_SHEETS.map((name) => join(framesDir, name)).find(existsSync);
   if (!sheet) return [];
 
-  const meta = await sharp(sheet).metadata();
-  const sliceWidth = Math.floor(meta.width / 5);
-  if (!sliceWidth) return [];
-
-  const frames = [];
-  for (let i = 0; i < 5; i += 1) {
-    const target = join(framesDir, `frame-${i + 1}.png`);
-    await sharp(sheet)
-      .extract({ left: i * sliceWidth, top: 0, width: sliceWidth, height: meta.height })
-      .png()
-      .toFile(target);
-    frames.push(target);
-  }
-  console.log('✂️  Foglio cornici diviso in assets/frames/frame-1.png … frame-5.png');
+  // Import dinamico: `src/frames.js` carica sharp, che deve partire dopo fontconfig.
+  const { splitSheet } = await import('../src/frames.js');
+  const frames = await splitSheet(sheet, { targetDir: framesDir });
+  console.log('✂️  Foglio cornici diviso in assets/frames/frame-1.png … frame-5.png (finestra trasparente)');
   return frames;
 }
 
-/** Nome sulla targhetta in alto, serie su quella in basso. */
+/**
+ * Nome sulla targhetta in alto, serie su quella in basso.
+ *
+ * Le targhette sono semitrasparenti: senza cornice propria il testo finirebbe
+ * direttamente sull'artwork e sui disegni chiari sarebbe illeggibile.
+ */
 function platesOverlay(card, width, height) {
-  const nameSize = fitFont(card.name, width * 0.34, Math.round(width * 0.075), 12);
-  const seriesSize = fitFont(card.series, width * 0.38, Math.round(width * 0.058), 10);
+  const nameSize = fitFont(card.name, width * 0.38, Math.round(width * 0.072), 12);
+  const seriesSize = fitFont(card.series, width * 0.4, Math.round(width * 0.055), 10);
+  const topY = Math.round(height * 0.03);
+  const topH = Math.round(height * 0.08);
+  const bottomY = Math.round(height * 0.885);
+  const bottomH = Math.round(height * 0.08);
+  const inset = Math.round(width * 0.07);
   return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  <text x="${width / 2}" y="${height * 0.068}" text-anchor="middle" font-family="${FONT}"
+  <rect x="${inset}" y="${topY}" width="${width - inset * 2}" height="${topH}" rx="${Math.round(topH * 0.32)}"
+        fill="#0b0b10" fill-opacity="0.55" stroke="#c8a86a" stroke-opacity="0.6" stroke-width="1.5"/>
+  <text x="${width / 2}" y="${topY + Math.round(topH * 0.7)}" text-anchor="middle" font-family="${FONT}"
         font-size="${nameSize}" font-weight="bold" fill="#f8e3ba"
         stroke="#1a1208" stroke-width="0.8">${escapeXml(card.name)}</text>
-  <text x="${width / 2}" y="${height * 0.972}" text-anchor="middle" font-family="${FONT}"
+  <rect x="${inset}" y="${bottomY}" width="${width - inset * 2}" height="${bottomH}" rx="${Math.round(bottomH * 0.32)}"
+        fill="#0b0b10" fill-opacity="0.55" stroke="#c8a86a" stroke-opacity="0.6" stroke-width="1.5"/>
+  <text x="${width / 2}" y="${bottomY + Math.round(bottomH * 0.66)}" text-anchor="middle" font-family="${FONT}"
         font-size="${seriesSize}" fill="#f3ddb4"
         stroke="#1a1208" stroke-width="0.6">${escapeXml(card.series)}</text>
 </svg>`;
