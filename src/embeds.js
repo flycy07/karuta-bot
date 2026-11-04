@@ -21,12 +21,12 @@ function baseEmbed(card) {
   return embed;
 }
 
-/** Carta non ancora indovinata: mostra solo serie e rarità. */
+/** Carta ancora coperta: mostra solo serie e rarità (usato se manca l'immagine). */
 export function hiddenCardEmbed(card, { index, total, expiresAt }) {
   const embed = baseEmbed(card)
     .setTitle(`${card.emoji} ${stars(card.rarity)}`)
     .setDescription(
-      `**Serie:** ${card.series}\n\n*Scrivi il nome del personaggio in chat per prenderla.*\n` +
+      `**Serie:** ${card.series}\n\n*Clicca il numero qui sotto per prenderla.*\n` +
         `<t:${Math.floor(expiresAt / 1000)}:R>`,
     );
   return embed;

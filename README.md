@@ -137,6 +137,11 @@ Se un personaggio non viene trovato (nomi traslitterati in modo strano, comprima
 script lo dice e puoi mettergli l'immagine a mano in `assets/art/<id>.png`: il resto
 funziona lo stesso.
 
+Se l'host esegue solo `npm install` e non genera le carte in build, il bot se ne accorge
+all'avvio: con `assets/cards/` vuota lancia da sé lo scaricamento e la composizione in
+background (`src/images.js`), così i drop passano alle immagini appena sono pronte senza
+riavviare niente. Si disattiva con `YOMI_SKIP_IMAGES=1`.
+
 ### Cornici: dove metterle
 
 Le cornici vanno nella cartella **`assets/frames/`** (dentro il progetto, accanto a

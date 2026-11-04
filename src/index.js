@@ -1,6 +1,7 @@
 import { catalog } from './cards.js';
 import { config } from './config.js';
 import { startBot } from './bot.js';
+import { ensureCardImages } from './images.js';
 import { startStatusServer } from './server.js';
 
 if (!config.token) {
@@ -45,3 +46,12 @@ try {
   console.error('Avvio fallito:', error.message);
   process.exit(1);
 }
+
+// Se il server parte senza immagini (host che esegue solo `npm install`) le
+// generiamo in background: il bot è già online e i drop le trovano appena
+// esistono, invece di mostrare il vecchio embed di testo.
+ensureCardImages()
+  .then((count) => {
+    if (count) console.log(`🖼️  ${count} immagini delle carte pronte.`);
+  })
+  .catch((error) => console.warn('⚠️  Immagini non generate:', error.message));
