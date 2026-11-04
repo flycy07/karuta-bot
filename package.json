@@ -12,7 +12,8 @@
     "test": "node --test test/",
     "demo": "node scripts/demo.js",
     "art": "node scripts/fetch-art.js",
-    "cards": "node scripts/build-cards.js"
+    "cards": "node scripts/build-cards.js",
+    "postinstall": "node scripts/install-images.js"
   },
   "dependencies": {
     "@expo-google-fonts/roboto": "^0.4.3",
