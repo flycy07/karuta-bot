@@ -36,7 +36,9 @@ Il bot deve restare acceso: se il processo muore, i drop smettono di funzionare.
 **Wispbyte** (free, filesystem persistente): immagine Docker **Node.js 22.13+ o 24**
 (`node:sqlite` esiste da 22.5 ma funziona senza flag solo da 22.13), codice via *GitHub
 Integration* o upload della zip, variabili `DISCORD_TOKEN`, `GUILD_ID` e `ADMIN_ROLE_ID`
-nel tab *Startup*, comando di avvio `node src/index.js`.
+nel tab *Startup*, comando di avvio `node src/index.js`. Le immagini non stanno nel
+repository: dopo il primo avvio lancia una volta `npm run art && npm run cards` nella
+console del server, altrimenti i drop restano senza immagine.
 
 **Render** (free): il servizio è un *web service*, quindi Render pretende una porta HTTP e
 spegne l'istanza dopo 15 minuti senza traffico in ingresso. Per questo il bot avvia una
@@ -114,27 +116,48 @@ Frieren, Oshi no Ko e altri).
 Nel drop ogni carta è **solo la sua immagine**, senza testo sopra, con i pulsanti numerati
 sotto: è il formato "cartolina" dei bot tipo Karuta.
 
-Tre modi per dare un'immagine a una carta, in ordine di preferenza:
+Quattro modi per dare un'immagine a una carta, in ordine di preferenza:
 
-1. **PNG già pronto** in `assets/cards/<id>.png` (es. `assets/cards/satoru-gojo.png`):
+1. **Farsele scaricare online** con `npm run art`: lo script interroga l'API pubblica di
+   [AniList](https://anilist.co) (gratis, nessuna chiave da chiedere), cerca ogni
+   personaggio **dentro la sua serie** e salva l'immagine in `assets/art/<id>.png`.
+   Poi `npm run cards` la mette nella cornice della rarità. Fa una richiesta per serie,
+   non per carta, e scarica solo quelle che mancano (`--force` le riscarica tutte).
+2. **PNG già pronto** in `assets/cards/<id>.png` (es. `assets/cards/satoru-gojo.png`):
    il bot lo invia come allegato, nessun hosting esterno da configurare.
-2. **Artwork grezzo** in `assets/art/<id>.png` + `npm run cards`: lo script mette
-   l'artwork sotto la cornice e scrive nome e serie sulle targhette.
-3. **URL nel catalogo**: campo `image` di `cards.json`, se le immagini sono già online.
+3. **Artwork tuo** in `assets/art/<id>.png` + `npm run cards`: lo script mette
+   l'artwork sotto la cornice e scrive nome e serie sulle targhette. Cerca il file per
+   `id` e poi per nome normalizzato (`Satoru Gojo` → `satoru-gojo.png`).
+4. **URL nel catalogo**: campo `image` di `cards.json`, se le immagini sono già online.
 
-### Cornici
+Se un personaggio non viene trovato (nomi traslitterati in modo strano, comprimari) lo
+script lo dice e puoi mettergli l'immagine a mano in `assets/art/<id>.png`: il resto
+funziona lo stesso.
 
-In `assets/frames/`, una per rarità dal comune al leggendario:
+### Cornici: dove metterle
 
-- `frame-1.png` … `frame-5.png` — PNG con il **centro trasparente**, così l'artwork si
-  vede attraverso la cornice;
-- oppure un foglio unico `assets/frames/frames.png` con le 5 cornici in fila: alla prima
-  esecuzione `npm run cards` lo divide da sé in `frame-1.png` … `frame-5.png`.
+Le cornici vanno nella cartella **`assets/frames/`** (dentro il progetto, accanto a
+`src/`), in uno dei due formati:
 
-Senza cartella `assets/frames/` lo script disegna una cornice sobria propria, quindi il
-bot funziona comunque. L'artwork è cercato per `id` e poi per nome normalizzato
-(`Satoru Gojo` → `satoru-gojo.png`). Le carte senza immagine usano l'embed testuale di
-prima (serie e rarità coperte). `assets/cards/` è generata e sta nel `.gitignore`.
+```
+assets/frames/frames.png          ← un solo file con le 5 cornici affiancate
+assets/frames/frame-1.png … frame-5.png   ← oppure già separate
+```
+
+Con il foglio unico non devi ritagliare niente: alla prima esecuzione `npm run cards`
+lo divide da sé in `frame-1.png` … `frame-5.png`. L'ordine è **da sinistra a destra**,
+dalla rarità più bassa alla più alta: 1 = common, 2 = uncommon, 3 = rare, 4 = epic,
+5 = legendary.
+
+Perché funzionino serve che siano PNG con il **canale alpha vero**: il centro della
+cornice deve essere trasparente, così sotto si vede l'artwork del personaggio. Uno
+screenshot con lo sfondo grigio/nero opaco coprirebbe la carta: in quel caso va tolto
+lo sfondo prima di salvarle.
+
+Senza cartella `assets/frames/` (o finché è vuota) lo script disegna una cornice sobria
+propria, quindi il bot funziona comunque. Le carte senza immagine usano l'embed
+testuale di prima (serie e rarità coperte). `assets/cards/` e `assets/art/` sono
+generate e stanno nel `.gitignore`: non finiscono nel repository.
 
 Le immagini dei personaggi sono file tuoi: il repository non include artwork protetti,
 quindi il catalogo resta di soli nomi finché non aggiungi gli originali.
@@ -144,7 +167,8 @@ quindi il catalogo resta di soli nomi finché non aggiungi gli originali.
 ```bash
 npm test     # test del motore di gioco (node:test, nessuna dipendenza)
 npm run demo # simula un drop con i pulsanti nel terminale, senza token
-npm run cards # genera le immagini delle carte in assets/cards/
+npm run art  # scarica online gli artwork dei personaggi in assets/art/
+npm run cards # genera le immagini delle carte in assets/cards/ (artwork + cornice)
 ```
 
 ## Struttura

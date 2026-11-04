@@ -5,12 +5,13 @@
   "type": "module",
   "description": "Yomi: bot Discord per collezionare carte con drop a pulsanti numerati, collezione, wishlist e scambi.",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "start": "node src/index.js",
     "test": "node --test test/",
     "demo": "node scripts/demo.js",
+    "art": "node scripts/fetch-art.js",
     "cards": "node scripts/build-cards.js"
   },
   "dependencies": {
