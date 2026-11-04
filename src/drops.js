@@ -151,7 +151,7 @@ export class DropManager {
   /** Claim via pulsante: valida, aggiorna il database e ridisegna il messaggio del drop. */
   async claim({ sessionId, userId, username, index, now = Date.now() }) {
     const session = this.byId.get(sessionId);
-    if (!session) return { closed: true } && { result: 'closed' };
+    if (!session) return { result: 'closed' };
 
     const outcome = claimCard(session, {
       userId,
