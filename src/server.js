@@ -8,6 +8,7 @@
 import { readdirSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { imageJobStatus } from './images.js';
 
 const cardsDir = fileURLToPath(new URL('../assets/cards/', import.meta.url));
 
@@ -29,6 +30,16 @@ const runtime = {
   },
 };
 
+/** Riga leggibile sullo stato della generazione delle immagini. */
+function jobLabel() {
+  const job = imageJobStatus();
+  if (job.state === 'disabled') return 'disattivata (YOMI_SKIP_IMAGES=1)';
+  if (job.state === 'running') return `in corso da ${Math.round((Date.now() - job.startedAt) / 1000)}s`;
+  if (job.state === 'error') return `errore: ${job.error ?? 'sconosciuto'}`;
+  if (job.state === 'done') return 'completata';
+  return 'non avviata';
+}
+
 function esc(value) {
   return String(value).replace(/[&<>"']/g, (char) => {
     const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -43,6 +54,7 @@ function page(status, uptimeSeconds) {
     ['Server', String(status.servers)],
     ['Carte nel catalogo', String(status.cards)],
     ['Immagini generate', `${runtime.images} / ${status.cards}`],
+    ['Generazione', jobLabel()],
     ['Versione', runtime.commit],
     ['Node', runtime.node],
     ['Uptime', `${Math.floor(uptimeSeconds / 60)}m ${uptimeSeconds % 60}s`],
@@ -95,6 +107,7 @@ export function startStatusServer({ port, getStatus }) {
         branch: runtime.branch,
         node: runtime.node,
         images: runtime.images,
+        imageJob: imageJobStatus(),
         ...getStatus(),
       });
       response.writeHead(200, {

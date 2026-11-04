@@ -17,6 +17,14 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const cardsDir = fileURLToPath(new URL('../assets/cards/', import.meta.url));
 
+/** Stato dell'ultima generazione: finisce in /health, così si vede cosa succede. */
+const job = { state: 'idle', error: null, startedAt: null, finishedAt: null };
+
+/** Copia dello stato della generazione delle immagini. */
+export function imageJobStatus() {
+  return { ...job };
+}
+
 /** Quante carte hanno già il loro PNG. */
 export function cardImageCount() {
   try {
@@ -54,20 +62,34 @@ function run(script) {
  * Ritorna quanti PNG ci sono alla fine (0 se disattivato o se ha fallito).
  */
 export async function ensureCardImages({ log = console } = {}) {
-  if (process.env.YOMI_SKIP_IMAGES === '1') return 0;
+  if (process.env.YOMI_SKIP_IMAGES === '1') {
+    job.state = 'disabled';
+    return 0;
+  }
 
   const before = cardImageCount();
-  if (before > 0) return before;
+  if (before > 0) {
+    job.state = 'done';
+    job.finishedAt = Date.now();
+    return before;
+  }
+
+  job.state = 'running';
+  job.startedAt = Date.now();
+  job.error = null;
 
   log.log('🖼️  Nessuna immagine delle carte: le genero in background (qualche minuto)…');
   try {
     await run('fetch-art.js');
     await run('build-cards.js');
   } catch (error) {
+    job.error = error.message;
     log.warn(`⚠️  Generazione immagini non riuscita: ${error.message}`);
   }
 
   const after = cardImageCount();
+  job.state = after > 0 ? 'done' : 'error';
+  job.finishedAt = Date.now();
   log.log(after ? `🖼️  ${after} immagini delle carte generate.` : '⚠️  Nessuna immagine generata.');
   return after;
 }
