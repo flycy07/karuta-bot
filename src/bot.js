@@ -1,18 +1,13 @@
 import { ActivityType, Client, Events, GatewayIntentBits } from 'discord.js';
 import { catalog } from './cards.js';
-import { commands, handleButton, handleCommand } from './commands.js';
+import { commands, handleAutocomplete, handleButton, handleCommand } from './commands.js';
 import { openDatabase } from './db.js';
 import { DropManager } from './drops.js';
 
 export function createClient() {
   return new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      // Necessario per leggere i nomi scritti in chat durante un drop.
-      // Va abilitato anche nel Developer Portal (Bot -> Message Content Intent).
-      GatewayIntentBits.MessageContent,
-    ],
+    // Nessun intent privilegiato: i claim passano dai pulsanti, non dai messaggi.
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
   });
 }
 
@@ -22,13 +17,10 @@ export async function startBot(config) {
   const drops = new DropManager({ db, config, catalog });
   const ctx = { db, config, drops, client };
 
-  client.on(Events.MessageCreate, (message) => {
-    drops.handleMessage(message).catch((error) => console.error('[drop]', error));
-  });
-
   client.on(Events.InteractionCreate, async (interaction) => {
     try {
-      if (interaction.isChatInputCommand()) await handleCommand(interaction, ctx);
+      if (interaction.isAutocomplete()) await handleAutocomplete(interaction);
+      else if (interaction.isChatInputCommand()) await handleCommand(interaction, ctx);
       else if (interaction.isButton()) await handleButton(interaction, ctx);
     } catch (error) {
       console.error('[interazione]', error);

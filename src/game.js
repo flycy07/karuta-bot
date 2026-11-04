@@ -11,14 +11,14 @@ export const RARITIES = {
   legendary: { label: 'Legendary', weight: 1, stars: 5, color: 0xf1c40f },
 };
 
-/** Tentativi sbagliati prima di perdere il diritto al claim su un drop. */
-export const MAX_STRIKES = 3;
+/** Massimo di carte per drop (una fila di pulsanti Discord sono 5). */
+export const MAX_CARDS_PER_DROP = 5;
 
 function toRng(rng) {
   return typeof rng === 'function' ? rng : Math.random;
 }
 
-/** Minuscolo, senza accenti né punteggiatura: "Nozomi Kōri!" -> "nozomi kori". */
+/** Minuscolo, senza accenti né punteggiatura: usato per cercare carte e serie. */
 export function normalizeName(value) {
   return String(value ?? '')
     .normalize('NFKD')
@@ -29,7 +29,14 @@ export function normalizeName(value) {
     .replace(/\s+/g, ' ');
 }
 
-/** Il guess deve combaciare con il nome o con uno degli alias della carta. */
+/** Carte il cui nome (o id) contiene il testo cercato: lookup admin e autocomplete. */
+export function findCardsByName(pool, query) {
+  const q = normalizeName(query);
+  if (!q) return [];
+  return pool.filter((card) => normalizeName(card.name).includes(q) || card.id === q);
+}
+
+/** Corrispondenza esatta (normalizzata) con il nome o con uno degli alias della carta. */
 export function matchesCard(card, guess) {
   const target = normalizeName(guess);
   if (!target) return false;
@@ -61,7 +68,7 @@ export function rollCard(pool, rng = Math.random) {
 export function rollDrop(pool, count, rng = Math.random) {
   const picked = [];
   const available = [...pool];
-  const wanted = Math.max(1, count);
+  const wanted = Math.min(MAX_CARDS_PER_DROP, Math.max(1, count));
   for (let i = 0; i < wanted && available.length; i += 1) {
     const card = rollCard(available, rng);
     picked.push(card);
@@ -76,46 +83,43 @@ export function createDropSession({ cards, now = Date.now(), durationMs = 60_000
     ...rest,
     cards: [...cards],
     claimed: [],
-    strikes: new Map(),
     createdAt: now,
     expiresAt: now + durationMs,
     closed: false,
-    noticesShown: new Set(),
   };
 }
 
+export function isClaimed(session, index) {
+  return session.claimed.some((entry) => entry.index === index);
+}
+
 export function remainingCards(session) {
-  const claimedIds = new Set(session.claimed.map((entry) => entry.card.id));
-  return session.cards.filter((card) => !claimedIds.has(card.id));
+  return session.cards.filter((card, index) => !isClaimed(session, index));
 }
 
 /**
- * Valuta un tentativo di claim.
+ * Claim tramite pulsante numerato.
  *
- * Ritorna { result: 'claimed', card } | { result: 'wrong', ... } |
- * { result: 'cooldown', retryInMs } | { result: 'blocked' } | { result: 'closed' }.
+ * Ritorna { result: 'claimed', card } | { result: 'taken', card, owner } |
+ * { result: 'already', card } | { result: 'cooldown', retryInMs } |
+ * { result: 'closed' } | { result: 'invalid' }.
  */
-export function resolveClaim(session, { userId, guess, now = Date.now(), cooldownMs = 0, lastClaimAt = 0 }) {
+export function claimCard(session, { userId, index, now = Date.now(), cooldownMs = 0, lastClaimAt = 0 }) {
   if (session.closed || now >= session.expiresAt) return { result: 'closed' };
 
-  const remaining = remainingCards(session);
-  if (remaining.length === 0) return { result: 'closed' };
+  const card = session.cards[index];
+  if (!card) return { result: 'invalid' };
+
+  const owner = session.claimed.find((entry) => entry.index === index);
+  if (owner) return { result: 'taken', card, owner: owner.userId };
+
+  const mine = session.claimed.find((entry) => entry.userId === userId);
+  if (mine) return { result: 'already', card: mine.card };
 
   if (lastClaimAt && now - lastClaimAt < cooldownMs) {
     return { result: 'cooldown', retryInMs: cooldownMs - (now - lastClaimAt) };
   }
 
-  const strikes = session.strikes.get(userId) ?? 0;
-  if (strikes >= MAX_STRIKES) return { result: 'blocked' };
-
-  const card = remaining.find((entry) => matchesCard(entry, guess));
-  if (!card) {
-    const next = strikes + 1;
-    session.strikes.set(userId, next);
-    return { result: 'wrong', strikes: next, remainingStrikes: Math.max(0, MAX_STRIKES - next) };
-  }
-
-  session.claimed.push({ userId, card, at: now });
-  session.strikes.delete(userId);
+  session.claimed.push({ index, card, userId, at: now });
   return { result: 'claimed', card };
 }
