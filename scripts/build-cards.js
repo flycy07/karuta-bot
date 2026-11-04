@@ -58,6 +58,11 @@ ensureFonts();
 // Import dinamico: fontconfig va configurato prima che libvips si inizializzi.
 const sharp = (await import('sharp')).default;
 
+// Host gratuiti con poca RAM: senza cache di libvips e con un solo thread il
+// picco di memoria resta basso e la generazione è prevedibile.
+sharp.cache(false);
+sharp.concurrency(1);
+
 function escapeXml(value) {
   return String(value).replace(
     /[&<>"']/g,

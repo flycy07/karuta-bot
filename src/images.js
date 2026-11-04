@@ -37,7 +37,9 @@ export function cardImageCount() {
 /** Esegue uno script del progetto e raccoglie l'output per i log. */
 function run(script) {
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, [join(root, 'scripts', script)], {
+    // Host gratuiti con 512 MB: limitiamo l'heap del figlio, così il totale
+    // resta prevedibile e il processo del bot non viene ucciso per memoria.
+    const child = spawn(process.execPath, ['--max-old-space-size=192', join(root, 'scripts', script)], {
       cwd: root,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
