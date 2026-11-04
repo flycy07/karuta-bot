@@ -118,12 +118,26 @@ Tre modi per dare un'immagine a una carta, in ordine di preferenza:
 
 1. **PNG già pronto** in `assets/cards/<id>.png` (es. `assets/cards/satoru-gojo.png`):
    il bot lo invia come allegato, nessun hosting esterno da configurare.
-2. **Artwork grezzo** in `assets/art/<id>.png` + `npm run cards`: lo script disegna
-   cornice, targhetta col nome, serie, stelle di rarità e numero di serie.
+2. **Artwork grezzo** in `assets/art/<id>.png` + `npm run cards`: lo script mette
+   l'artwork sotto la cornice e scrive nome e serie sulle targhette.
 3. **URL nel catalogo**: campo `image` di `cards.json`, se le immagini sono già online.
 
-Le carte senza immagine usano l'embed testuale di prima (serie e rarità coperte), quindi
-il bot funziona anche a catalogo vuoto. `assets/cards/` è generata e sta nel `.gitignore`.
+### Cornici
+
+In `assets/frames/`, una per rarità dal comune al leggendario:
+
+- `frame-1.png` … `frame-5.png` — PNG con il **centro trasparente**, così l'artwork si
+  vede attraverso la cornice;
+- oppure un foglio unico `assets/frames/frames.png` con le 5 cornici in fila: alla prima
+  esecuzione `npm run cards` lo divide da sé in `frame-1.png` … `frame-5.png`.
+
+Senza cartella `assets/frames/` lo script disegna una cornice sobria propria, quindi il
+bot funziona comunque. L'artwork è cercato per `id` e poi per nome normalizzato
+(`Satoru Gojo` → `satoru-gojo.png`). Le carte senza immagine usano l'embed testuale di
+prima (serie e rarità coperte). `assets/cards/` è generata e sta nel `.gitignore`.
+
+Le immagini dei personaggi sono file tuoi: il repository non include artwork protetti,
+quindi il catalogo resta di soli nomi finché non aggiungi gli originali.
 
 ## Sviluppo
 
