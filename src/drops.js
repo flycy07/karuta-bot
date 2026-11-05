@@ -1,9 +1,23 @@
 import { randomUUID } from 'node:crypto';
 import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { cardImageSource } from './cards.js';
-import { getLastClaimAt, recordClaim, touchUser } from './db.js';
+import {
+  dueDropCooldowns,
+  getDropCooldown,
+  getLastClaimAt,
+  markDropCooldownNotified,
+  recordClaim,
+  setDropCooldown,
+  touchUser,
+} from './db.js';
 import { cardImageEmbed, hiddenCardEmbed, revealedCardEmbed } from './embeds.js';
-import { claimCard, createDropSession, remainingCards } from './game.js';
+import {
+  claimCard,
+  cooldownRemaining as remainingCooldown,
+  createDropSession,
+  formatWait,
+  remainingCards,
+} from './game.js';
 import { cardStrip, STRIP_NAME } from './strip.js';
 
 /**
@@ -12,18 +26,21 @@ import { cardStrip, STRIP_NAME } from './strip.js';
  * mentre collezioni e cooldown sono su SQLite.
  */
 export class DropManager {
-  constructor({ db, config, catalog }) {
+  constructor({ db, config, catalog, client = null }) {
     this.db = db;
     this.config = config;
     this.catalog = catalog;
+    this.client = client;
     this.byId = new Map();
     this.sessions = new Map();
-    this.guildDrops = new Map();
+    this.watcher = null;
+    this.notifying = false;
   }
 
-  cooldownRemaining(guildId, now = Date.now()) {
-    const last = this.guildDrops.get(guildId) ?? 0;
-    return Math.max(0, this.config.dropCooldownMs - (now - last));
+  /** Quanto manca al prossimo `/drop` di questo utente (0 = può droppare subito). */
+  cooldownRemaining(userId, now = Date.now()) {
+    const row = getDropCooldown(this.db, userId);
+    return row ? remainingCooldown(row.expires_at, now) : 0;
   }
 
   /** Sorgenti immagine delle carte di un drop (file locale oppure URL). */
@@ -104,7 +121,7 @@ export class DropManager {
     return rows;
   }
 
-  async start({ channel, guildId, cards, now = Date.now() }) {
+  async start({ channel, guildId, userId = null, cards, now = Date.now() }) {
     const session = createDropSession({
       id: randomUUID(),
       cards,
@@ -119,7 +136,15 @@ export class DropManager {
     session.messageId = message.id;
     this.byId.set(session.id, session);
     this.sessions.set(channel.id, session);
-    this.guildDrops.set(guildId, now);
+
+    // Il cooldown è per utente e sta su SQLite: deve sopravvivere al riavvio, così
+    // il DM di fine attesa arriva comunque.
+    if (userId) {
+      setDropCooldown(this.db, userId, now + this.config.dropCooldownMs, {
+        guildId,
+        channelId: channel.id,
+      });
+    }
 
     session.timer = setTimeout(() => {
       this.finish(session.id).catch(() => {});
@@ -136,6 +161,62 @@ export class DropManager {
   async refresh(session) {
     if (!session.message) return;
     await session.message.edit(await this.payload(session)).catch(() => {});
+  }
+
+  /**
+   * Avvisi di fine cooldown.
+   *
+   * Niente timer per utente: al riavvio sparirebbero. Un controllo periodico sui
+   * cooldown salvati in SQLite recupera anche quelli scaduti mentre il bot era
+   * offline (su Render l'istanza gratuita si riavvia spesso).
+   */
+  watchCooldowns(intervalMs = this.config.dropNotifyIntervalMs ?? 30_000) {
+    if (this.watcher) return this.watcher;
+    this.notifyDueCooldowns().catch(() => {});
+    this.watcher = setInterval(() => {
+      this.notifyDueCooldowns().catch(() => {});
+    }, intervalMs);
+    this.watcher.unref?.();
+    return this.watcher;
+  }
+
+  stopCooldowns() {
+    if (this.watcher) clearInterval(this.watcher);
+    this.watcher = null;
+  }
+
+  /** Manda il DM a chi ha il cooldown scaduto e ritorna quanti ne sono partiti. */
+  async notifyDueCooldowns(now = Date.now()) {
+    if (this.notifying) return 0;
+    this.notifying = true;
+    let sent = 0;
+    try {
+      for (const row of dueDropCooldowns(this.db, now)) {
+        // Segnato prima dell'invio: con i DM chiusi non si riprova all'infinito.
+        markDropCooldownNotified(this.db, row.user_id, now);
+        if (await this.sendCooldownDm(row)) sent += 1;
+      }
+    } finally {
+      this.notifying = false;
+    }
+    return sent;
+  }
+
+  async sendCooldownDm(row) {
+    if (!this.client) return false;
+    try {
+      const user = await this.client.users.fetch(row.user_id);
+      await user.send({
+        content:
+          `🎴 È finita l'attesa di **${formatWait(this.config.dropCooldownMs)}**: ` +
+          'puoi far cadere nuove carte con `/drop`.',
+        allowedMentions: { parse: [] },
+      });
+      return true;
+    } catch (error) {
+      console.warn(`[cooldown] DM a ${row.user_id} non inviato: ${error.message}`);
+      return false;
+    }
   }
 
   async finish(sessionId) {
