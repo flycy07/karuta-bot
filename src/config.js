@@ -5,14 +5,30 @@ function int(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+const DEFAULT_COOLDOWN_MINUTES = 30;
+const MAX_COOLDOWN_MINUTES = 1440; // 1 giorno
+
 /**
  * Cooldown tra due `/drop` dello stesso utente, in minuti.
  *
  * Il vecchio `DROP_COOLDOWN_MS` (5 secondi, per server) è ignorato di proposito:
  * un valore rimasto nelle variabili d'ambiente dell'host non deve poter
- * annullare i 30 minuti.
+ * annullare i 30 minuti. Un valore fuori scala (es. `30000`, che sarebbero 21
+ * giorni) torna al default con un avviso nei log, invece di bloccare i drop.
  */
-const dropCooldownMinutes = Math.max(0, int(process.env.DROP_COOLDOWN_MINUTES, 30));
+function cooldownMinutes(raw) {
+  const parsed = Number.parseInt(raw ?? '', 10);
+  if (!Number.isFinite(parsed)) return DEFAULT_COOLDOWN_MINUTES;
+  if (parsed < 1 || parsed > MAX_COOLDOWN_MINUTES) {
+    console.warn(
+      `⚠️  DROP_COOLDOWN_MINUTES=${raw} fuori intervallo (1-${MAX_COOLDOWN_MINUTES} minuti): uso ${DEFAULT_COOLDOWN_MINUTES} minuti.`,
+    );
+    return DEFAULT_COOLDOWN_MINUTES;
+  }
+  return parsed;
+}
+
+const dropCooldownMinutes = cooldownMinutes(process.env.DROP_COOLDOWN_MINUTES);
 
 export const config = {
   token: (process.env.DISCORD_TOKEN ?? '').trim(),
