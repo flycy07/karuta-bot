@@ -40,6 +40,14 @@ CREATE TABLE IF NOT EXISTS trades (
 );
 
 CREATE INDEX IF NOT EXISTS idx_inventory_card ON inventory (card_id);
+
+CREATE TABLE IF NOT EXISTS drop_cooldowns (
+  user_id TEXT PRIMARY KEY,
+  expires_at INTEGER NOT NULL,
+  notified_at INTEGER NOT NULL DEFAULT 0,
+  guild_id TEXT,
+  channel_id TEXT
+);
 `;
 
 export function openDatabase(file = 'data/yomi.db') {
@@ -139,6 +147,45 @@ export function getTrade(db, id) {
 
 export function setTradeStatus(db, id, status) {
   db.prepare('UPDATE trades SET status = ? WHERE id = ?').run(status, id);
+}
+
+/**
+ * Cooldown di `/drop` per utente.
+ *
+ * Sta su SQLite (e non in memoria) perché il DM di fine attesa deve arrivare
+ * anche se nel frattempo il bot è stato riavviato o ridistribuito.
+ */
+export function setDropCooldown(db, userId, expiresAt, { guildId = null, channelId = null } = {}) {
+  db.prepare(
+    `INSERT INTO drop_cooldowns (user_id, expires_at, notified_at, guild_id, channel_id)
+     VALUES (?, ?, 0, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       expires_at = excluded.expires_at,
+       notified_at = 0,
+       guild_id = COALESCE(excluded.guild_id, drop_cooldowns.guild_id),
+       channel_id = COALESCE(excluded.channel_id, drop_cooldowns.channel_id)`,
+  ).run(userId, expiresAt, guildId, channelId);
+}
+
+export function getDropCooldown(db, userId) {
+  return db.prepare('SELECT * FROM drop_cooldowns WHERE user_id = ?').get(userId) ?? null;
+}
+
+/** Cooldown scaduti che non hanno ancora ricevuto il DM di fine attesa. */
+export function dueDropCooldowns(db, now = Date.now(), limit = 25) {
+  return db
+    .prepare(
+      `SELECT * FROM drop_cooldowns
+       WHERE expires_at <= ? AND notified_at = 0
+       ORDER BY expires_at ASC
+       LIMIT ?`,
+    )
+    .all(now, limit);
+}
+
+/** Segna il DM come inviato (o come non più da inviare, se l'utente ha i privati chiusi). */
+export function markDropCooldownNotified(db, userId, now = Date.now()) {
+  db.prepare('UPDATE drop_cooldowns SET notified_at = ? WHERE user_id = ?').run(now, userId);
 }
 
 export function topCollectors(db, limit = 10) {

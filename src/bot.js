@@ -14,7 +14,7 @@ export function createClient() {
 export async function startBot(config) {
   const db = openDatabase(config.databaseFile);
   const client = createClient();
-  const drops = new DropManager({ db, config, catalog });
+  const drops = new DropManager({ db, config, catalog, client });
   const ctx = { db, config, drops, client };
 
   client.on(Events.InteractionCreate, async (interaction) => {
@@ -41,6 +41,10 @@ export async function startBot(config) {
     }
     ready.user.setActivity('le carte cadere', { type: ActivityType.Watching });
     console.log(`📚 Catalogo: ${catalog.length} carte.`);
+
+    // Da qui in poi possiamo mandare i DM di fine cooldown, anche quelli scaduti
+    // mentre il bot era spento.
+    drops.watchCooldowns();
   });
 
   client.on(Events.Error, (error) => console.error('[client]', error));
