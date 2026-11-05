@@ -199,7 +199,10 @@ async function analyzeFrame(frameBuffer, width, height) {
       bottom = y;
     }
   }
-  return { artMask, spans, top, bottom, hasWindow: top >= 0 };
+  const filled = spans.filter(Boolean);
+  const left = filled.length ? Math.min(...filled.map((span) => span.left)) : 0;
+  const right = filled.length ? Math.max(...filled.map((span) => span.right)) : width - 1;
+  return { artMask, spans, top, bottom, left, right, hasWindow: top >= 0 };
 }
 
 /** Rettangolo (x, w) che sta dentro la finestra per tutte le righe di [y, y + h]. */
@@ -222,8 +225,8 @@ function windowSpan(window, y, h) {
  * direttamente sull'artwork e sui disegni chiari sarebbe illeggibile.
  */
 function platesOverlay(card, width, height, window) {
-  const plateH = Math.round(height * 0.07);
-  const margin = Math.round(width * 0.025);
+  const plateH = Math.round(height * 0.05);
+  const margin = Math.round(width * 0.015);
   const fallback = { x: Math.round(width * 0.12), w: Math.round(width * 0.76) };
 
   // Le finestre ad arco sono strette in alto e in basso: la targhetta si ferma
@@ -242,19 +245,19 @@ function platesOverlay(card, width, height, window) {
   const top = place(topY);
   const bottom = place(bottomY);
 
-  const nameSize = fitFont(card.name, top.w * 0.92, Math.round(width * 0.072), 11);
-  const seriesSize = fitFont(card.series, bottom.w * 0.92, Math.round(width * 0.055), 9);
+  const nameSize = fitFont(card.name, top.w * 0.92, Math.round(width * 0.062), 10);
+  const seriesSize = fitFont(card.series, bottom.w * 0.92, Math.round(width * 0.048), 8);
   const rx = Math.round(plateH * 0.32);
   const plate = (box, y) =>
     `<rect x="${box.x}" y="${y}" width="${box.w}" height="${plateH}" rx="${rx}"
-        fill="#0b0b10" fill-opacity="0.6" stroke="#c8a86a" stroke-opacity="0.7" stroke-width="1.5"/>`;
+        fill="#0b0b10" fill-opacity="0.5" stroke="#c8a86a" stroke-opacity="0.7" stroke-width="1.2"/>`;
   return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
   ${plate(top, topY)}
-  <text x="${top.x + top.w / 2}" y="${topY + Math.round(plateH * 0.68)}" text-anchor="middle" font-family="${FONT}"
+  <text x="${top.x + top.w / 2}" y="${topY + Math.round(plateH * 0.72)}" text-anchor="middle" font-family="${FONT}"
         font-size="${nameSize}" font-weight="bold" fill="#f8e3ba"
         stroke="#1a1208" stroke-width="0.8">${escapeXml(card.name)}</text>
   ${plate(bottom, bottomY)}
-  <text x="${bottom.x + bottom.w / 2}" y="${bottomY + Math.round(plateH * 0.64)}" text-anchor="middle" font-family="${FONT}"
+  <text x="${bottom.x + bottom.w / 2}" y="${bottomY + Math.round(plateH * 0.68)}" text-anchor="middle" font-family="${FONT}"
         font-size="${seriesSize}" fill="#f3ddb4"
         stroke="#1a1208" stroke-width="0.6">${escapeXml(card.series)}</text>
 </svg>`;
@@ -377,9 +380,20 @@ async function buildCard(card, frames) {
   // trasparente: l'artwork passa sotto, ma solo dentro la sagoma della cornice.
   const frameBuffer = await sharp(framePath).resize(width, height, { fit: 'fill' }).png().toBuffer();
   const window = await analyzeFrame(frameBuffer, width, height);
-  const maskedArt = await sharp(raw)
-    .resize(width, height, { fit: 'cover' })
-    .ensureAlpha()
+  // L'artwork va adattato alla FINESTRA, non a tutta la carta: la cornice copre
+  // i bordi e il personaggio finirebbe tagliato. Sotto il bordo resta una copia
+  // a carta intera, così non si vede mai vuoto fra finestra e cornice.
+  let artBase = await sharp(raw).resize(width, height, { fit: 'cover' }).ensureAlpha().png().toBuffer();
+  if (art && window.hasWindow) {
+    const pad = Math.round(width * 0.05);
+    const x = Math.max(0, window.left - pad);
+    const y = Math.max(0, window.top - pad);
+    const w = Math.min(width, window.right + pad + 1) - x;
+    const h = Math.min(height, window.bottom + pad + 1) - y;
+    const fitted = await sharp(art).resize(w, h, { fit: 'cover', position: 'attention' }).png().toBuffer();
+    artBase = await sharp(artBase).composite([{ input: fitted, left: x, top: y }]).png().toBuffer();
+  }
+  const maskedArt = await sharp(artBase)
     .composite([{ input: window.artMask, blend: 'dest-in' }])
     .png()
     .toBuffer();
