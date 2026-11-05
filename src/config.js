@@ -5,6 +5,15 @@ function int(value, fallback) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+/**
+ * Cooldown tra due `/drop` dello stesso utente, in minuti.
+ *
+ * Il vecchio `DROP_COOLDOWN_MS` (5 secondi, per server) è ignorato di proposito:
+ * un valore rimasto nelle variabili d'ambiente dell'host non deve poter
+ * annullare i 30 minuti.
+ */
+const dropCooldownMinutes = Math.max(0, int(process.env.DROP_COOLDOWN_MINUTES, 30));
+
 export const config = {
   token: (process.env.DISCORD_TOKEN ?? '').trim(),
   guildId: (process.env.GUILD_ID ?? '').trim() || null,
@@ -16,7 +25,8 @@ export const config = {
   /** Quanto resta aperto un drop. */
   dropDurationMs: int(process.env.DROP_DURATION_MS, 60_000),
   /** Cooldown tra due /drop dello stesso utente (30 minuti di default). */
-  dropCooldownMs: int(process.env.DROP_COOLDOWN_MS, 30 * 60_000),
+  dropCooldownMinutes,
+  dropCooldownMs: dropCooldownMinutes * 60_000,
   /** Ogni quanto controllare i cooldown scaduti per mandare il DM di fine attesa. */
   dropNotifyIntervalMs: int(process.env.DROP_NOTIFY_INTERVAL_MS, 30_000),
 };

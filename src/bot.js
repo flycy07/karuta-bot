@@ -41,6 +41,7 @@ export async function startBot(config) {
     }
     ready.user.setActivity('le carte cadere', { type: ActivityType.Watching });
     console.log(`📚 Catalogo: ${catalog.length} carte.`);
+    console.log(`⏱️  Cooldown di /drop: ${config.dropCooldownMinutes} minuti per utente.`);
 
     // Da qui in poi possiamo mandare i DM di fine cooldown, anche quelli scaduti
     // mentre il bot era spento.

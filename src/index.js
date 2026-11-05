@@ -35,6 +35,7 @@ if (process.env.PORT) {
       ready: Boolean(client?.isReady?.()),
       servers: client?.guilds?.cache?.size ?? 0,
       cards: catalog.length,
+      dropCooldownMinutes: config.dropCooldownMinutes,
     }),
   });
   console.log(`🌐 Dashboard di stato sulla porta ${port} (/health per i ping).`);

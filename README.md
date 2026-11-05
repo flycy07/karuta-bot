@@ -218,10 +218,11 @@ test/            test del motore
 - Il bot ha bisogno di `Send Messages`, `Embed Links` e `Read Message History` nei canali
   dove droppa.
 - Un drop per canale alla volta; ogni utente può usare `/drop` una volta ogni 30 minuti
-  (`DROP_COOLDOWN_MS`, in millisecondi, default `1800000`). Alla scadenza il bot manda un
-  DM all'utente che ha lanciato il drop. Il cooldown sta su SQLite, quindi l'avviso arriva
-  anche se nel frattempo il bot è stato riavviato o ridistribuito;
-  `DROP_NOTIFY_INTERVAL_MS` decide ogni quanto controllare i cooldown scaduti (default 30s).
+  (`DROP_COOLDOWN_MINUTES`, in minuti, default `30`; il vecchio `DROP_COOLDOWN_MS` in
+  millisecondi viene ignorato). Alla scadenza il bot manda un DM all'utente che ha lanciato
+  il drop. Il cooldown sta su SQLite, quindi l'avviso arriva anche se nel frattempo il bot
+  è stato riavviato o ridistribuito; `DROP_NOTIFY_INTERVAL_MS` decide ogni quanto
+  controllare i cooldown scaduti (default 30s).
 - Le sessioni di drop attive stanno in memoria (si perdono al riavvio); collezioni e
   cooldown sono su SQLite e sopravvivono.
 - Gli scambi riverificano il possesso delle carte al click di *Accetta*, quindi non si
