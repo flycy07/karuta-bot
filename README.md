@@ -70,6 +70,8 @@ server e `npm start` si comporta come prima.
 3. Chi clicca per primo il pulsante di una carta la prende: la carta si rivela nel
    messaggio del drop e il pulsante si disabilita.
 4. Una carta a testa per drop e cooldown personale dopo ogni claim.
+5. Dopo un `/drop` c'è un'attesa di **30 minuti** prima di poterne fare un altro: quando
+   scade, il bot ti manda un **messaggio in privato** per avvisarti.
 
 Non serve scrivere niente in chat, quindi il bot non richiede **Message Content Intent**.
 
@@ -160,10 +162,22 @@ lo divide da sé in `frame-1.png` … `frame-5.png`. L'ordine è **da sinistra a
 dalla rarità più bassa alla più alta: 1 = common, 2 = uncommon, 3 = rare, 4 = epic,
 5 = legendary.
 
-Perché funzionino serve che siano PNG con il **canale alpha vero**: il centro della
-cornice deve essere trasparente, così sotto si vede l'artwork del personaggio. Uno
-screenshot con lo sfondo grigio/nero opaco coprirebbe la carta: in quel caso va tolto
-lo sfondo prima di salvarle.
+Se vuoi vedere subito cosa esce, `npm run frames` fa la stessa cosa da sola e scrive
+anche un'anteprima in `artifacts/frames-preview.png` (le cornici sopra uno sfondo
+colorato, per controllare che il centro sia davvero trasparente):
+
+```bash
+npm run frames                            # legge assets/frames/frames.png
+npm run frames -- --inset-x 6 --inset-y 4 # finestra più larga (se resta un bordo scuro)
+npm run frames -- --keep-alpha            # cornici già trasparenti al centro
+```
+
+Perché funzionino serve che il centro della cornice sia trasparente, così sotto si vede
+l'artwork del personaggio: uno screenshot con lo sfondo grigio/nero opaco coprirebbe la
+carta. Se il tuo foglio ha il centro opaco non devi ritoccarlo: dividendo il foglio
+(`npm run frames`, o `npm run cards`) la finestra centrale viene resa trasparente in
+automatico. Se resta visibile una cornice di pixel scuri attorno all'artwork, allarga
+la finestra con `--inset-x` / `--inset-y` più piccoli (es. `--inset-x 6 --inset-y 3`).
 
 Senza cartella `assets/frames/` (o finché è vuota) lo script disegna una cornice sobria
 propria, quindi il bot funziona comunque. Le carte senza immagine usano l'embed
@@ -203,7 +217,11 @@ test/            test del motore
 
 - Il bot ha bisogno di `Send Messages`, `Embed Links` e `Read Message History` nei canali
   dove droppa.
-- Un drop per canale alla volta; `/drop` ha un cooldown per server (`DROP_COOLDOWN_MS`).
+- Un drop per canale alla volta; ogni utente può usare `/drop` una volta ogni 30 minuti
+  (`DROP_COOLDOWN_MS`, in millisecondi, default `1800000`). Alla scadenza il bot manda un
+  DM all'utente che ha lanciato il drop. Il cooldown sta su SQLite, quindi l'avviso arriva
+  anche se nel frattempo il bot è stato riavviato o ridistribuito;
+  `DROP_NOTIFY_INTERVAL_MS` decide ogni quanto controllare i cooldown scaduti (default 30s).
 - Le sessioni di drop attive stanno in memoria (si perdono al riavvio); collezioni e
   cooldown sono su SQLite e sopravvivono.
 - Gli scambi riverificano il possesso delle carte al click di *Accetta*, quindi non si
