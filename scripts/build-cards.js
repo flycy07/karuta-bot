@@ -225,41 +225,68 @@ function windowSpan(window, y, h) {
  * direttamente sull'artwork e sui disegni chiari sarebbe illeggibile.
  */
 function platesOverlay(card, width, height, window) {
-  const plateH = Math.round(height * 0.05);
+  const baseH = Math.round(height * 0.064);
   const margin = Math.round(width * 0.015);
   const fallback = { x: Math.round(width * 0.12), w: Math.round(width * 0.76) };
 
   // Le finestre ad arco sono strette in alto e in basso: la targhetta si ferma
   // dove la finestra è larga almeno l'82% del suo punto più largo.
   const maxWidth = Math.max(...window.spans.filter(Boolean).map((span) => span.right - span.left));
-  const enough = (y) => (windowSpan(window, y, plateH)?.w ?? 0) >= maxWidth * 0.82;
-  let topY = window.top + margin;
-  while (topY < window.bottom - plateH * 3 && !enough(topY)) topY += 2;
-  let bottomY = window.bottom - margin - plateH;
-  while (bottomY > topY + plateH * 3 && !enough(bottomY)) bottomY -= 2;
+  const availW = Math.max(40, maxWidth * 0.82 - margin * 2);
 
-  const place = (y) => {
-    const span = windowSpan(window, y, plateH) ?? fallback;
+  // Testo lungo = carattere minuscolo: in quel caso va su due righe, con la
+  // targhetta più alta, così resta leggibile anche nelle finestre strette.
+  const layout = (text, base, bold) => {
+    const single = fitFont(text, availW * 0.94, base, 8);
+    const words = text.split(/\s+/).filter(Boolean);
+    if (single >= 19 || words.length < 2) {
+      return { lines: [text], size: Math.max(single, 11), h: baseH };
+    }
+    let best = null;
+    for (let i = 1; i < words.length; i += 1) {
+      const lines = [words.slice(0, i).join(' '), words.slice(i).join(' ')];
+      const longest = Math.max(lines[0].length, lines[1].length);
+      if (!best || longest < best.longest) best = { lines, longest };
+    }
+    const size = Math.max(fitFont('x'.repeat(best.longest), availW * 0.94, base, 11), 11);
+    return { lines: best.lines, size, h: Math.round(baseH * 1.7) };
+  };
+  const name = layout(card.name, Math.round(width * 0.082));
+  const series = layout(card.series, Math.round(width * 0.062));
+
+  const enough = (y, h) => (windowSpan(window, y, h)?.w ?? 0) >= maxWidth * 0.82;
+  let topY = window.top + margin;
+  while (topY < window.bottom - name.h * 3 && !enough(topY, name.h)) topY += 2;
+  let bottomY = window.bottom - margin - series.h;
+  while (bottomY > topY + series.h * 3 && !enough(bottomY, series.h)) bottomY -= 2;
+
+  const place = (y, h) => {
+    const span = windowSpan(window, y, h) ?? fallback;
     return { x: span.x + margin, w: Math.max(40, span.w - margin * 2) };
   };
-  const top = place(topY);
-  const bottom = place(bottomY);
+  const top = place(topY, name.h);
+  const bottom = place(bottomY, series.h);
 
-  const nameSize = fitFont(card.name, top.w * 0.92, Math.round(width * 0.062), 10);
-  const seriesSize = fitFont(card.series, bottom.w * 0.92, Math.round(width * 0.048), 8);
-  const rx = Math.round(plateH * 0.32);
-  const plate = (box, y) =>
-    `<rect x="${box.x}" y="${y}" width="${box.w}" height="${plateH}" rx="${rx}"
-        fill="#0b0b10" fill-opacity="0.5" stroke="#c8a86a" stroke-opacity="0.7" stroke-width="1.2"/>`;
+  const rx = Math.round(baseH * 0.32);
+  const plate = (box, y, h) =>
+    `<rect x="${box.x}" y="${y}" width="${box.w}" height="${h}" rx="${rx}"
+        fill="#08080c" fill-opacity="0.84" stroke="#d9b877" stroke-opacity="0.9" stroke-width="1.5"/>`;
+  const label = (box, y, item, weight, fill, stroke) => {
+    const lineH = Math.round(item.size * 1.12);
+    const first = y + Math.round((item.h - lineH * (item.lines.length - 1)) / 2 + item.size * 0.36);
+    return item.lines
+      .map(
+        (line, i) => `<text x="${box.x + box.w / 2}" y="${first + i * lineH}" text-anchor="middle" font-family="${FONT}"
+        font-size="${item.size}" font-weight="${weight}" fill="${fill}"
+        stroke="#000000" stroke-width="${stroke}" paint-order="stroke" stroke-linejoin="round">${escapeXml(line)}</text>`,
+      )
+      .join('\n  ');
+  };
   return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  ${plate(top, topY)}
-  <text x="${top.x + top.w / 2}" y="${topY + Math.round(plateH * 0.72)}" text-anchor="middle" font-family="${FONT}"
-        font-size="${nameSize}" font-weight="bold" fill="#f8e3ba"
-        stroke="#1a1208" stroke-width="0.8">${escapeXml(card.name)}</text>
-  ${plate(bottom, bottomY)}
-  <text x="${bottom.x + bottom.w / 2}" y="${bottomY + Math.round(plateH * 0.68)}" text-anchor="middle" font-family="${FONT}"
-        font-size="${seriesSize}" fill="#f3ddb4"
-        stroke="#1a1208" stroke-width="0.6">${escapeXml(card.series)}</text>
+  ${plate(top, topY, name.h)}
+  ${label(top, topY, name, 'bold', '#fff4d6', 2.4)}
+  ${plate(bottom, bottomY, series.h)}
+  ${label(bottom, bottomY, series, 'bold', '#f6e6c2', 2)}
 </svg>`;
 }
 
