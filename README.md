@@ -129,7 +129,7 @@ Quattro modi per dare un'immagine a una carta, in ordine di preferenza:
 1. **Farsele scaricare online** con `npm run art`: lo script interroga l'API pubblica di
    [AniList](https://anilist.co) (gratis, nessuna chiave da chiedere), cerca ogni
    personaggio **dentro la sua serie** e salva l'immagine in `assets/art/<id>.png`.
-   Poi `npm run cards` la mette nella cornice della rarità. Fa una richiesta per serie,
+   Poi `npm run cards` la mette nella sua cornice. Fa una richiesta per serie,
    non per carta, e scarica solo quelle che mancano (`--force` le riscarica tutte).
 2. **PNG già pronto** in `assets/cards/<id>.png` (es. `assets/cards/satoru-gojo.png`):
    il bot lo invia come allegato, nessun hosting esterno da configurare.
@@ -153,14 +153,19 @@ Le cornici vanno nella cartella **`assets/frames/`** (dentro il progetto, accant
 `src/`), in uno dei due formati:
 
 ```
-assets/frames/frames.png          ← un solo file con le 5 cornici affiancate
-assets/frames/frame-1.png … frame-5.png   ← oppure già separate
+assets/frames/frames.png           ← un solo file con le cornici affiancate
+assets/frames/frame-1.png … frame-6.png   ← oppure già separate
 ```
 
 Con il foglio unico non devi ritagliare niente: alla prima esecuzione `npm run cards`
-lo divide da sé in `frame-1.png` … `frame-5.png`. L'ordine è **da sinistra a destra**,
-dalla rarità più bassa alla più alta: 1 = common, 2 = uncommon, 3 = rare, 4 = epic,
-5 = legendary.
+lo divide da sé in `frame-1.png` … `frame-N.png`. Riconosce dove finisce una cornice e
+comincia la successiva, quindi vanno bene anche cornici di larghezza diversa o
+distanziate in modo irregolare, e quante ne vuoi (5, 6…). **Non ritagliarle a mano:**
+basta il foglio intero.
+
+Le cornici sono **solo decorative**, non legate alle rarità: ogni carta ne riceve una,
+sempre la stessa per quella carta (dipende dal suo id), così rigenerando le carte le
+immagini non cambiano.
 
 Se vuoi vedere subito cosa esce, `npm run frames` fa la stessa cosa da sola e scrive
 anche un'anteprima in `artifacts/frames-preview.png` (le cornici sopra uno sfondo
@@ -172,12 +177,13 @@ npm run frames -- --inset-x 6 --inset-y 4 # finestra più larga (se resta un bor
 npm run frames -- --keep-alpha            # cornici già trasparenti al centro
 ```
 
-Perché funzionino serve che il centro della cornice sia trasparente, così sotto si vede
-l'artwork del personaggio: uno screenshot con lo sfondo grigio/nero opaco coprirebbe la
-carta. Se il tuo foglio ha il centro opaco non devi ritoccarlo: dividendo il foglio
-(`npm run frames`, o `npm run cards`) la finestra centrale viene resa trasparente in
-automatico. Se resta visibile una cornice di pixel scuri attorno all'artwork, allarga
-la finestra con `--inset-x` / `--inset-y` più piccoli (es. `--inset-x 6 --inset-y 3`).
+Perché funzionino serve che il centro della cornice risulti trasparente, così sotto si
+vede l'artwork del personaggio: un centro bianco o opaco coprirebbe la carta. Non devi
+ritoccare il foglio a mano: dividendo le cornici (`npm run frames` o `npm run cards`)
+l'interno viene aperto in automatico. Se l'interno è **bianco** viene svuotato seguendo
+il disegno, così i decori che sporgono verso il centro restano intatti; altrimenti si
+apre una finestra rettangolare. Se resta visibile un bordo di pixel attorno all'artwork,
+allarga la finestra con `--inset-x` / `--inset-y` più piccoli (es. `--inset-x 6 --inset-y 3`).
 
 Senza cartella `assets/frames/` (o finché è vuota) lo script disegna una cornice sobria
 propria, quindi il bot funziona comunque. Le carte senza immagine usano l'embed
