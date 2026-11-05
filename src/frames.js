@@ -99,6 +99,15 @@ export async function keyWhiteInterior(buffer, { tolerance = 26 } = {}) {
  * finestra rettangolare con gli inset indicati.
  */
 export async function cutWindow(buffer, options = {}) {
+  // Cornice già trasparente al centro: non si tocca niente. Applicare comunque la
+  // finestra rettangolare taglia via bordi, teschi, gemme e ogni decoro che
+  // sporge verso l'interno, lasciando solo due strisce laterali.
+  const { data, info } = await sharp(buffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const centre = (Math.floor(info.height / 2) * info.width + Math.floor(info.width / 2)) * info.channels;
+  if (data[centre + 3] < 10) {
+    return sharp(buffer).ensureAlpha().png({ compressionLevel: 9 }).toBuffer();
+  }
+
   const insets = { ...DEFAULT_INSETS, ...options };
   const keyed = await keyWhiteInterior(buffer, insets);
   if (keyed) return keyed;

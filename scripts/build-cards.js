@@ -131,28 +131,130 @@ async function loadFrames() {
 }
 
 /**
- * Nome sulla targhetta in alto, serie su quella in basso.
+ * Analizza la cornice (già ridimensionata alla carta) leggendo il canale alpha.
+ *
+ * - `outer`: pixel trasparenti collegati ai bordi dell'immagine, cioè fuori dalla
+ *   sagoma della cornice (angoli arrotondati, corna del drago, margini).
+ * - `inner`: pixel trasparenti collegati al centro, cioè la finestra.
+ *
+ * L'artwork va tenuto solo dove NON è `outer`: così sta dentro la finestra e sotto
+ * il bordo, ma non sborda fuori dalla cornice. Le targhette di nome e serie vanno
+ * dentro la finestra (`inner`), non sopra teschi, gemme e decori.
+ */
+async function analyzeFrame(frameBuffer, width, height) {
+  const { data } = await sharp(frameBuffer).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const transparent = (x, y) => data[(y * width + x) * 4 + 3] < 24;
+
+  const flood = (seeds) => {
+    const mark = new Uint8Array(width * height);
+    const stack = [];
+    for (const [x, y] of seeds) {
+      if (transparent(x, y) && !mark[y * width + x]) {
+        mark[y * width + x] = 1;
+        stack.push(y * width + x);
+      }
+    }
+    while (stack.length) {
+      const p = stack.pop();
+      const x = p % width;
+      const y = (p - x) / width;
+      for (const [nx, ny] of [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]]) {
+        if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+        const q = ny * width + nx;
+        if (mark[q] || !transparent(nx, ny)) continue;
+        mark[q] = 1;
+        stack.push(q);
+      }
+    }
+    return mark;
+  };
+
+  const edgeSeeds = [];
+  for (let x = 0; x < width; x += 1) edgeSeeds.push([x, 0], [x, height - 1]);
+  for (let y = 0; y < height; y += 1) edgeSeeds.push([0, y], [width - 1, y]);
+  const outer = flood(edgeSeeds);
+  const inner = flood([[Math.floor(width / 2), Math.floor(height / 2)]]);
+
+  // Maschera dell'artwork: opaca ovunque tranne fuori dalla cornice. Si restringe
+  // di 1px l'esterno così il bordo antialiased della cornice copre l'artwork.
+  const mask = Buffer.alloc(width * height * 4, 255);
+  for (let i = 0; i < width * height; i += 1) mask[i * 4 + 3] = outer[i] ? 0 : 255;
+  const artMask = await sharp(mask, { raw: { width, height, channels: 4 } }).png().toBuffer();
+
+  // Estensione orizzontale della finestra riga per riga.
+  const spans = new Array(height).fill(null);
+  let top = -1;
+  let bottom = -1;
+  for (let y = 0; y < height; y += 1) {
+    let left = -1;
+    let right = -1;
+    for (let x = 0; x < width; x += 1) {
+      if (!inner[y * width + x]) continue;
+      if (left < 0) left = x;
+      right = x;
+    }
+    if (left >= 0) {
+      spans[y] = { left, right };
+      if (top < 0) top = y;
+      bottom = y;
+    }
+  }
+  return { artMask, spans, top, bottom, hasWindow: top >= 0 };
+}
+
+/** Rettangolo (x, w) che sta dentro la finestra per tutte le righe di [y, y + h]. */
+function windowSpan(window, y, h) {
+  let left = 0;
+  let right = Infinity;
+  for (let row = y; row <= y + h; row += 1) {
+    const span = window.spans[Math.min(Math.max(row, 0), window.spans.length - 1)];
+    if (!span) return null;
+    left = Math.max(left, span.left);
+    right = Math.min(right, span.right);
+  }
+  return right > left ? { x: left, w: right - left } : null;
+}
+
+/**
+ * Nome sulla targhetta in alto, serie su quella in basso, dentro la finestra.
  *
  * Le targhette sono semitrasparenti: senza cornice propria il testo finirebbe
  * direttamente sull'artwork e sui disegni chiari sarebbe illeggibile.
  */
-function platesOverlay(card, width, height) {
-  const nameSize = fitFont(card.name, width * 0.38, Math.round(width * 0.072), 12);
-  const seriesSize = fitFont(card.series, width * 0.4, Math.round(width * 0.055), 10);
-  const topY = Math.round(height * 0.03);
-  const topH = Math.round(height * 0.08);
-  const bottomY = Math.round(height * 0.885);
-  const bottomH = Math.round(height * 0.08);
-  const inset = Math.round(width * 0.07);
+function platesOverlay(card, width, height, window) {
+  const plateH = Math.round(height * 0.07);
+  const margin = Math.round(width * 0.025);
+  const fallback = { x: Math.round(width * 0.12), w: Math.round(width * 0.76) };
+
+  // Le finestre ad arco sono strette in alto e in basso: la targhetta si ferma
+  // dove la finestra è larga almeno l'82% del suo punto più largo.
+  const maxWidth = Math.max(...window.spans.filter(Boolean).map((span) => span.right - span.left));
+  const enough = (y) => (windowSpan(window, y, plateH)?.w ?? 0) >= maxWidth * 0.82;
+  let topY = window.top + margin;
+  while (topY < window.bottom - plateH * 3 && !enough(topY)) topY += 2;
+  let bottomY = window.bottom - margin - plateH;
+  while (bottomY > topY + plateH * 3 && !enough(bottomY)) bottomY -= 2;
+
+  const place = (y) => {
+    const span = windowSpan(window, y, plateH) ?? fallback;
+    return { x: span.x + margin, w: Math.max(40, span.w - margin * 2) };
+  };
+  const top = place(topY);
+  const bottom = place(bottomY);
+
+  const nameSize = fitFont(card.name, top.w * 0.92, Math.round(width * 0.072), 11);
+  const seriesSize = fitFont(card.series, bottom.w * 0.92, Math.round(width * 0.055), 9);
+  const rx = Math.round(plateH * 0.32);
+  const plate = (box, y) =>
+    `<rect x="${box.x}" y="${y}" width="${box.w}" height="${plateH}" rx="${rx}"
+        fill="#0b0b10" fill-opacity="0.6" stroke="#c8a86a" stroke-opacity="0.7" stroke-width="1.5"/>`;
   return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  <rect x="${inset}" y="${topY}" width="${width - inset * 2}" height="${topH}" rx="${Math.round(topH * 0.32)}"
-        fill="#0b0b10" fill-opacity="0.55" stroke="#c8a86a" stroke-opacity="0.6" stroke-width="1.5"/>
-  <text x="${width / 2}" y="${topY + Math.round(topH * 0.7)}" text-anchor="middle" font-family="${FONT}"
+  ${plate(top, topY)}
+  <text x="${top.x + top.w / 2}" y="${topY + Math.round(plateH * 0.68)}" text-anchor="middle" font-family="${FONT}"
         font-size="${nameSize}" font-weight="bold" fill="#f8e3ba"
         stroke="#1a1208" stroke-width="0.8">${escapeXml(card.name)}</text>
-  <rect x="${inset}" y="${bottomY}" width="${width - inset * 2}" height="${bottomH}" rx="${Math.round(bottomH * 0.32)}"
-        fill="#0b0b10" fill-opacity="0.55" stroke="#c8a86a" stroke-opacity="0.6" stroke-width="1.5"/>
-  <text x="${width / 2}" y="${bottomY + Math.round(bottomH * 0.66)}" text-anchor="middle" font-family="${FONT}"
+  ${plate(bottom, bottomY)}
+  <text x="${bottom.x + bottom.w / 2}" y="${bottomY + Math.round(plateH * 0.64)}" text-anchor="middle" font-family="${FONT}"
         font-size="${seriesSize}" fill="#f3ddb4"
         stroke="#1a1208" stroke-width="0.6">${escapeXml(card.series)}</text>
 </svg>`;
@@ -261,18 +363,31 @@ async function buildCard(card, frames) {
     ? await sharp(art).resize(width, height, { fit: 'cover', position: 'attention' }).toBuffer()
     : Buffer.from(placeholder(card, width, height));
 
-  const layers = [];
-  if (framePath) {
-    // La cornice ha il centro trasparente: l'artwork passa sotto e resta visibile.
-    layers.push({ input: await sharp(framePath).resize(width, height, { fit: 'fill' }).png().toBuffer() });
-    layers.push({ input: Buffer.from(platesOverlay(card, width, height)) });
-  } else {
-    layers.push({ input: Buffer.from(drawnFrame(card, width, height)) });
+  const out = join(outDir, `${card.id}.png`);
+
+  if (!framePath) {
+    await sharp(raw)
+      .composite([{ input: Buffer.from(drawnFrame(card, width, height)) }])
+      .png({ compressionLevel: 9 })
+      .toFile(out);
+    return { art: Boolean(art), frame: false };
   }
 
-  const out = join(outDir, `${card.id}.png`);
-  await sharp(raw).composite(layers).png({ compressionLevel: 9 }).toFile(out);
-  return { art: Boolean(art), frame: Boolean(framePath) };
+  // La cornice resta a dimensione piena (mai rimpicciolita) e ha il centro
+  // trasparente: l'artwork passa sotto, ma solo dentro la sagoma della cornice.
+  const frameBuffer = await sharp(framePath).resize(width, height, { fit: 'fill' }).png().toBuffer();
+  const window = await analyzeFrame(frameBuffer, width, height);
+  const maskedArt = await sharp(raw)
+    .resize(width, height, { fit: 'cover' })
+    .ensureAlpha()
+    .composite([{ input: window.artMask, blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+
+  const layers = [{ input: frameBuffer }];
+  if (window.hasWindow) layers.push({ input: Buffer.from(platesOverlay(card, width, height, window)) });
+  await sharp(maskedArt).composite(layers).png({ compressionLevel: 9 }).toFile(out);
+  return { art: Boolean(art), frame: true };
 }
 
 const filter = (process.argv[2] ?? '').toLowerCase();
