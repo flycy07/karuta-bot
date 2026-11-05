@@ -2,11 +2,12 @@
  * Genera le immagini delle carte in `assets/cards/`.
  *
  * Con le cornici in `assets/frames/` l'artwork sta sotto la cornice e il nome e
- * la serie finiscono sulle due targhette. Cornici accettate:
- *   - `frame-1.png` … `frame-5.png` (PNG con il centro trasparente), ordinate
- *     dalla rarità più bassa alla più alta, oppure
- *   - `frames.png`: un foglio con le 5 cornici in fila, che viene diviso in
- *     automatico nei 5 file qui sopra.
+ * la serie finiscono sulle due targhette. Le cornici sono **solo decorative**:
+ * ogni carta ne riceve una, sempre la stessa per lei, senza legame con la rarità.
+ * Cornici accettate:
+ *   - `frame-1.png` … `frame-N.png` (PNG con il centro trasparente), oppure
+ *   - `frames.png`: un foglio con le cornici affiancate, che viene diviso in
+ *     automatico nei file qui sopra.
  * Senza cornici lo script disegna una cornice sobria da sé, così il drop
  * funziona comunque.
  *
@@ -104,15 +105,20 @@ function findArt(card) {
   return null;
 }
 
-/** Le 5 cornici, in ordine di rarità crescente. Le trova o le ritaglia dal foglio. */
+/** Le cornici disponibili: già separate oppure da ritagliare dal foglio. */
 async function loadFrames() {
   if (!existsSync(framesDir)) return [];
 
   const separate = (n) => ['png', 'webp'].map((ext) => join(framesDir, `frame-${n}.${ext}`)).find(existsSync);
 
-  if ([1, 2, 3, 4, 5].every((n) => separate(n))) {
-    return [1, 2, 3, 4, 5].map(separate);
+  // Qualsiasi numero di cornici: ci si ferma alla prima che manca.
+  const numbered = [];
+  for (let n = 1; n <= 20; n += 1) {
+    const path = separate(n);
+    if (!path) break;
+    numbered.push(path);
   }
+  if (numbered.length) return numbered;
 
   const sheet = FRAME_SHEETS.map((name) => join(framesDir, name)).find(existsSync);
   if (!sheet) return [];
@@ -120,7 +126,7 @@ async function loadFrames() {
   // Import dinamico: `src/frames.js` carica sharp, che deve partire dopo fontconfig.
   const { splitSheet } = await import('../src/frames.js');
   const frames = await splitSheet(sheet, { targetDir: framesDir });
-  console.log('✂️  Foglio cornici diviso in assets/frames/frame-1.png … frame-5.png (finestra trasparente)');
+  console.log(`✂️  Foglio cornici diviso in ${frames.length} cornici in assets/frames/ (finestra trasparente)`);
   return frames;
 }
 
@@ -230,8 +236,22 @@ function placeholder(card, width, height) {
 </svg>`;
 }
 
+/**
+ * Cornice della carta: solo decorativa, non legata alla rarità.
+ *
+ * L'assegnazione dipende dall'id della carta, quindi è sempre la stessa per la
+ * stessa carta (le immagini non cambiano a ogni ricostruzione) ma si distribuisce
+ * su tutte le cornici disponibili.
+ */
+function frameFor(card, frames) {
+  if (!frames.length) return null;
+  let hash = 0;
+  for (const char of card.id) hash = (hash * 31 + char.codePointAt(0)) >>> 0;
+  return frames[hash % frames.length];
+}
+
 async function buildCard(card, frames) {
-  const framePath = frames[(RARITIES[card.rarity]?.stars ?? 1) - 1] ?? null;
+  const framePath = frameFor(card, frames);
   const frameMeta = framePath ? await sharp(framePath).metadata() : null;
   const width = frameMeta ? Math.round((frameMeta.width / frameMeta.height) * HEIGHT) : 500;
   const height = HEIGHT;
