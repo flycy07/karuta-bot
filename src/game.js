@@ -97,6 +97,23 @@ export function remainingCards(session) {
   return session.cards.filter((card, index) => !isClaimed(session, index));
 }
 
+/** Quanto manca alla fine di un cooldown: 0 se è già scaduto. */
+export function cooldownRemaining(expiresAt, now = Date.now()) {
+  return Math.max(0, (expiresAt ?? 0) - now);
+}
+
+/** Durata breve e leggibile: "45s", "12 min 5s", "1 h 20 min". */
+export function formatWait(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  if (total < 60) return `${total}s`;
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  if (minutes < 60) return seconds ? `${minutes} min ${seconds}s` : `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `${hours} h ${rest} min` : `${hours} h`;
+}
+
 /**
  * Claim tramite pulsante numerato.
  *

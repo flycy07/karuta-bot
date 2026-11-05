@@ -15,6 +15,8 @@ export const config = {
   claimCooldownMs: int(process.env.CLAIM_COOLDOWN_MS, 20_000),
   /** Quanto resta aperto un drop. */
   dropDurationMs: int(process.env.DROP_DURATION_MS, 60_000),
-  /** Cooldown tra due /drop nello stesso server. */
-  dropCooldownMs: int(process.env.DROP_COOLDOWN_MS, 5_000),
+  /** Cooldown tra due /drop dello stesso utente (30 minuti di default). */
+  dropCooldownMs: int(process.env.DROP_COOLDOWN_MS, 30 * 60_000),
+  /** Ogni quanto controllare i cooldown scaduti per mandare il DM di fine attesa. */
+  dropNotifyIntervalMs: int(process.env.DROP_NOTIFY_INTERVAL_MS, 30_000),
 };
