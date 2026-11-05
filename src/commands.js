@@ -10,7 +10,7 @@ import {
 import { catalog, cardsBySeries, getCard, rarityRank, seriesList } from './cards.js';
 import * as db from './db.js';
 import { cardInfoEmbed, colorOf, labelOf, stars } from './embeds.js';
-import { findCardsByName, matchesCard, normalizeName, rollDrop } from './game.js';
+import { findCardsByName, formatWait, matchesCard, normalizeName, rollDrop } from './game.js';
 
 const MAX_LIST = 20;
 
@@ -112,14 +112,29 @@ export const commands = [
         cards = rollDrop(pool, amount);
       }
 
-      const wait = ctx.drops.cooldownRemaining(interaction.guildId);
-      if (wait > 0) return ephemeral(interaction, `⏳ Aspetta ${Math.ceil(wait / 1000)}s prima di un altro drop.`);
+      const wait = ctx.drops.cooldownRemaining(interaction.user.id);
+      if (wait > 0) {
+        return ephemeral(
+          interaction,
+          `⏳ Puoi droppare di nuovo tra **${formatWait(wait)}**. ` +
+            'Ti scrivo in privato appena l\'attesa è finita.',
+        );
+      }
       if (!interaction.channel?.isSendable?.()) return ephemeral(interaction, 'Non posso scrivere in questo canale.');
 
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
-        await ctx.drops.start({ channel: interaction.channel, guildId: interaction.guildId, cards });
-        await interaction.editReply({ content: `🎴 Droppate **${cards.length}** cart${cards.length === 1 ? 'a' : 'e'}!` });
+        await ctx.drops.start({
+          channel: interaction.channel,
+          guildId: interaction.guildId,
+          userId: interaction.user.id,
+          cards,
+        });
+        await interaction.editReply({
+          content:
+            `🎴 Droppate **${cards.length}** cart${cards.length === 1 ? 'a' : 'e'}! ` +
+            `Prossimo drop tra ${formatWait(ctx.config.dropCooldownMs)}: ti avviso in privato.`,
+        });
       } catch (error) {
         await interaction.editReply({ content: `Errore nel drop: ${error.message}` });
       }
@@ -331,6 +346,7 @@ export const commands = [
             '**1.** Chiunque può usare `/drop`: cadono carte a caso. Gli admin possono scegliere carta o serie.',
             '**2.** Compaiono le carte coperte con i pulsanti **1**, **2**, **3**…: chi clicca per primo prende quella carta.',
             '**3.** Una carta a testa per drop, e un cooldown dopo ogni claim.',
+            "**4.** Dopo ogni `/drop` devi aspettare 30 minuti: quando l'attesa finisce il bot ti manda un messaggio in privato.",
             '',
             '**Comandi**',
             '`/drop [quantita] [carta] [serie]` · tutti; carta/serie solo admin',
