@@ -4,10 +4,11 @@
  *   npm run frames                          # usa assets/frames/frames.png
  *   npm run frames -- --sheet cornici.png   # oppure il file che vuoi
  *   npm run frames -- --inset-x 6 --inset-y 4 --radius 3   # finestra più larga/stretta
+ *   npm run frames -- --count 6             # forza il numero di cornici (divisione uguale)
  *   npm run frames -- --keep-alpha          # cornici già con il centro trasparente
  *
- * Scrive `frame-1.png` … `frame-5.png` (dalla rarità più bassa alla più alta) e
- * una anteprima in `artifacts/frames-preview.png` per controllare il risultato.
+ * Scrive `frame-1.png` … `frame-N.png` (quante cornici ci sono nel foglio) e una
+ * anteprima in `artifacts/frames-preview.png` per controllare il risultato.
  */
 import { existsSync, mkdirSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
@@ -29,6 +30,7 @@ const numbered = (name, fallback) => {
 };
 const sheetArg = argv.includes('--sheet') ? argv[argv.indexOf('--sheet') + 1] : null;
 const keepAlpha = argv.includes('--keep-alpha');
+const count = argv.includes('--count') ? numbered('count', undefined) : undefined;
 const insets = {
   insetX: numbered('inset-x', 7.5),
   insetY: numbered('inset-y', 4.5),
@@ -40,7 +42,7 @@ if (!sheet || !existsSync(sheet)) {
   console.error(
     `Nessun foglio di cornici trovato.\n` +
       `Metti il file in ${join('assets', 'frames', 'frames.png')} (o usa --sheet <file>):\n` +
-      `deve avere le 5 cornici affiancate, nell'ordine common → legendary.`,
+      `deve avere le cornici affiancate (5, 6 o quante vuoi) su uno sfondo uniforme.`,
   );
   process.exit(1);
 }
@@ -48,11 +50,16 @@ if (!sheet || !existsSync(sheet)) {
 mkdirSync(framesDir, { recursive: true });
 mkdirSync(artifactsDir, { recursive: true });
 
-const frames = keepAlpha ? await splitSheet(sheet, { targetDir: framesDir }) : await splitSheet(sheet, { targetDir: framesDir, ...insets });
+const frames = keepAlpha
+  ? await splitSheet(sheet, { targetDir: framesDir, count })
+  : await splitSheet(sheet, { targetDir: framesDir, count, ...insets });
 
 // Anteprima: cornici sopra uno sfondo colorato, così si vede se la finestra è
-// davvero trasparente e quanto artwork resta scoperto.
-const { width: sliceWidth, height } = await sharp(frames[0]).metadata();
+// davvero trasparente e quanto artwork resta scoperto. Le cornici riconosciute
+// dai margini non hanno la stessa larghezza, quindi si allineano a quella più larga.
+const metas = await Promise.all(frames.map((frame) => sharp(frame).metadata()));
+const height = Math.max(...metas.map((meta) => meta.height));
+const sliceWidth = Math.max(...metas.map((meta) => meta.width));
 const totalWidth = sliceWidth * frames.length;
 const background = Buffer.from(
   `<svg width="${totalWidth}" height="${height}" xmlns="http://www.w3.org/2000/svg">
@@ -61,11 +68,14 @@ const background = Buffer.from(
     <stop offset="1" stop-color="#8a5cff"/>
   </linearGradient></defs>
   <rect width="${totalWidth}" height="${height}" fill="url(#g)"/>
+  <text x="${totalWidth / 2}" y="${height / 2}" text-anchor="middle" font-family="sans-serif"
+        font-size="${Math.round(height * 0.1)}" font-weight="bold" fill="#ffffff" opacity="0.85">ARTWORK</text>
 </svg>`,
 );
 const layers = [];
 for (const [index, frame] of frames.entries()) {
-  layers.push({ input: frame, left: index * sliceWidth, top: 0 });
+  const resized = await sharp(frame).resize(sliceWidth, height, { fit: 'fill' }).png().toBuffer();
+  layers.push({ input: resized, left: index * sliceWidth, top: 0 });
 }
 const preview = await sharp(background).composite(layers).png({ compressionLevel: 9 }).toBuffer();
 await writeFile(join(artifactsDir, 'frames-preview.png'), preview);
