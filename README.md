@@ -63,6 +63,12 @@ server e `npm start` si comporta come prima.
 
 ## Come si gioca
 
+0. **Canale dei drop** (admin): `/dropchannel set [canale]` limita `/drop` a un solo canale
+   (senza `canale` usa quello in cui scrivi), `/dropchannel show` lo mostra e
+   `/dropchannel clear` toglie la restrizione. Fuori da quel canale `/drop` risponde
+   con il canale giusto. Il bot controlla subito di avere i permessi necessari lì; se il
+   canale viene cancellato la restrizione cade da sola. La scelta sta su SQLite, per
+   server, accanto alle collezioni: non le tocca e sopravvive ai riavvii.
 1. Chiunque può usare `/drop`: cadono da 1 a 5 carte a caso. Gli **admin** possono anche
    scegliere cosa far cadere, con una carta specifica (`carta:`) o con una serie
    (`serie:`); entrambe le opzioni hanno l'autocomplete.
@@ -209,7 +215,7 @@ src/
   config.js    variabili d'ambiente
   cards.js     caricamento catalogo
   game.js      motore puro: rarità, pesca, claim via pulsante, cooldown
-  db.js        SQLite (utenti, inventario, wishlist, trade)
+  db.js        SQLite (utenti, inventario, wishlist, trade, canale dei drop)
   embeds.js    embed delle carte
   drops.js     sessioni di drop attive, pulsanti e claim
   commands.js  comandi slash, autocomplete e bottoni

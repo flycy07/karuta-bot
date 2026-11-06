@@ -2,6 +2,7 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  ChannelType,
   EmbedBuilder,
   MessageFlags,
   PermissionFlagsBits,
@@ -23,6 +24,35 @@ function isAdmin(interaction, ctx) {
   if (interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) return true;
   const roleId = ctx.config.adminRoleId;
   return Boolean(roleId && interaction.member?.roles?.cache?.has(roleId));
+}
+
+/** Permessi che servono al bot per far cadere le carte in un canale. */
+const DROP_PERMISSIONS = [
+  ['ViewChannel', PermissionFlagsBits.ViewChannel, 'Vedere il canale'],
+  ['SendMessages', PermissionFlagsBits.SendMessages, 'Inviare messaggi'],
+  ['EmbedLinks', PermissionFlagsBits.EmbedLinks, 'Incorporare link'],
+  ['AttachFiles', PermissionFlagsBits.AttachFiles, 'Allegare file'],
+];
+
+/**
+ * Se il server ha un canale per i drop e questo non è quello giusto, restituisce
+ * l'id del canale corretto; altrimenti null (si può droppare qui).
+ *
+ * Un canale cancellato non deve bloccare i drop per sempre: in quel caso
+ * l'impostazione viene tolta e il drop passa.
+ */
+async function wrongDropChannel(interaction, ctx) {
+  if (!interaction.guildId) return null;
+  const channelId = db.getDropChannel(ctx.db, interaction.guildId);
+  if (!channelId || channelId === interaction.channelId) return null;
+  const channel = await interaction.guild?.channels
+    .fetch(channelId)
+    .catch((error) => (error?.code === 10003 ? null : {}));
+  if (channel === null) {
+    db.clearDropChannel(ctx.db, interaction.guildId);
+    return null;
+  }
+  return channelId;
 }
 
 function resolveCard(query) {
@@ -77,6 +107,11 @@ export const commands = [
         option.setName('serie').setDescription('Solo admin: pesca a caso solo da questa serie').setAutocomplete(true),
       ),
     async run(interaction, ctx) {
+      const allowedChannel = await wrongDropChannel(interaction, ctx);
+      if (allowedChannel) {
+        return ephemeral(interaction, `Qui non si può droppare: usa \`/drop\` in <#${allowedChannel}>.`);
+      }
+
       const amount = interaction.options.getInteger('quantita') ?? 3;
       const cardQuery = interaction.options.getString('carta');
       const seriesQuery = interaction.options.getString('serie');
@@ -138,6 +173,75 @@ export const commands = [
       } catch (error) {
         await interaction.editReply({ content: `Errore nel drop: ${error.message}` });
       }
+    },
+  },
+  {
+    builder: new SlashCommandBuilder()
+      .setName('dropchannel')
+      .setDescription('Admin: scegli il canale in cui si può usare /drop.')
+      .addSubcommand((sub) =>
+        sub
+          .setName('set')
+          .setDescription('Imposta il canale dei drop (se non scegli un canale, usa questo)')
+          .addChannelOption((option) =>
+            option
+              .setName('canale')
+              .setDescription('Canale di testo dove si potrà usare /drop')
+              .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement),
+          ),
+      )
+      .addSubcommand((sub) => sub.setName('show').setDescription('Mostra il canale dei drop attuale'))
+      .addSubcommand((sub) => sub.setName('clear').setDescription('Togli la restrizione: /drop in qualsiasi canale')),
+    async run(interaction, ctx) {
+      if (!interaction.guildId) return ephemeral(interaction, 'Questo comando funziona solo in un server.');
+      if (!isAdmin(interaction, ctx)) {
+        return ephemeral(
+          interaction,
+          'Solo chi ha **Gestire il server** (o il ruolo in `ADMIN_ROLE_ID`) può cambiare il canale dei drop.',
+        );
+      }
+
+      const sub = interaction.options.getSubcommand();
+      const current = db.getDropChannel(ctx.db, interaction.guildId);
+
+      if (sub === 'show') {
+        return ephemeral(
+          interaction,
+          current
+            ? `🎴 \`/drop\` si può usare solo in <#${current}>.`
+            : '🎴 Nessun canale impostato: `/drop` funziona in qualsiasi canale. Usa `/dropchannel set`.',
+        );
+      }
+
+      if (sub === 'clear') {
+        db.clearDropChannel(ctx.db, interaction.guildId);
+        return ephemeral(interaction, '🎴 Restrizione tolta: ora `/drop` funziona in qualsiasi canale.');
+      }
+
+      const picked = interaction.options.getChannel('canale') ?? interaction.channel;
+      const channel = await interaction.guild.channels.fetch(picked.id).catch(() => null);
+      if (!channel || !channel.isTextBased() || channel.isThread() || channel.isVoiceBased()) {
+        return ephemeral(interaction, 'Scegli un canale di testo normale (non un thread né un canale vocale).');
+      }
+
+      // Meglio scoprirlo ora che al primo /drop degli utenti.
+      const me = interaction.guild.members.me ?? (await interaction.guild.members.fetchMe());
+      const granted = channel.permissionsFor(me);
+      const missing = DROP_PERMISSIONS.filter(([, flag]) => !granted?.has(flag));
+      if (missing.length) {
+        return ephemeral(
+          interaction,
+          `Nel canale <#${channel.id}> al bot mancano questi permessi: ${missing.map(([, , label]) => `**${label}**`).join(', ')}. ` +
+            'Aggiungili e rilancia il comando.',
+        );
+      }
+
+      db.setDropChannel(ctx.db, interaction.guildId, channel.id);
+      return ephemeral(
+        interaction,
+        `🎴 Fatto: da ora \`/drop\` si può usare solo in <#${channel.id}>.` +
+          (current && current !== channel.id ? ` (Prima era <#${current}>.)` : ''),
+      );
     },
   },
   {
@@ -349,7 +453,8 @@ export const commands = [
             "**4.** Dopo ogni `/drop` devi aspettare 30 minuti: quando l'attesa finisce il bot ti manda un messaggio in privato.",
             '',
             '**Comandi**',
-            '`/drop [quantita] [carta] [serie]` · tutti; carta/serie solo admin',
+            '`/drop [quantita] [carta] [serie]` · tutti (solo nel canale dei drop, se impostato); carta/serie solo admin',
+            '`/dropchannel set|show|clear` · admin: scegli il canale dei drop',
             '`/collection [utente]` · la tua collezione',
             '`/card <nome>` · scheda carta',
             '`/series <nome>` · carte di una serie',

@@ -48,6 +48,13 @@ CREATE TABLE IF NOT EXISTS drop_cooldowns (
   guild_id TEXT,
   channel_id TEXT
 );
+
+-- Impostazioni per server. Tabella nuova: CREATE IF NOT EXISTS la aggiunge ai
+-- database esistenti senza toccare utenti, inventario, wishlist e scambi.
+CREATE TABLE IF NOT EXISTS guild_settings (
+  guild_id TEXT PRIMARY KEY,
+  drop_channel_id TEXT
+);
 `;
 
 export function openDatabase(file = 'data/yomi.db') {
@@ -186,6 +193,23 @@ export function dueDropCooldowns(db, now = Date.now(), limit = 25) {
 /** Segna il DM come inviato (o come non più da inviare, se l'utente ha i privati chiusi). */
 export function markDropCooldownNotified(db, userId, now = Date.now()) {
   db.prepare('UPDATE drop_cooldowns SET notified_at = ? WHERE user_id = ?').run(now, userId);
+}
+
+/** Canale in cui si può usare `/drop` in questo server (null = qualsiasi canale). */
+export function getDropChannel(db, guildId) {
+  const row = db.prepare('SELECT drop_channel_id FROM guild_settings WHERE guild_id = ?').get(guildId);
+  return row?.drop_channel_id ?? null;
+}
+
+export function setDropChannel(db, guildId, channelId) {
+  db.prepare(
+    `INSERT INTO guild_settings (guild_id, drop_channel_id) VALUES (?, ?)
+     ON CONFLICT(guild_id) DO UPDATE SET drop_channel_id = excluded.drop_channel_id`,
+  ).run(guildId, channelId);
+}
+
+export function clearDropChannel(db, guildId) {
+  db.prepare('UPDATE guild_settings SET drop_channel_id = NULL WHERE guild_id = ?').run(guildId);
 }
 
 export function topCollectors(db, limit = 10) {

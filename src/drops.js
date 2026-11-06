@@ -3,6 +3,7 @@ import { ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonStyle } from 
 import { cardImageSource } from './cards.js';
 import {
   dueDropCooldowns,
+  getDropChannel,
   getDropCooldown,
   getLastClaimAt,
   markDropCooldownNotified,
@@ -206,10 +207,11 @@ export class DropManager {
     if (!this.client) return false;
     try {
       const user = await this.client.users.fetch(row.user_id);
+      const dropChannel = row.guild_id ? getDropChannel(this.db, row.guild_id) : null;
       await user.send({
         content:
           `🎴 È finita l'attesa di **${formatWait(this.config.dropCooldownMs)}**: ` +
-          'puoi far cadere nuove carte con `/drop`.',
+          `puoi far cadere nuove carte con \`/drop\`${dropChannel ? ` in <#${dropChannel}>` : ''}.`,
         allowedMentions: { parse: [] },
       });
       return true;
